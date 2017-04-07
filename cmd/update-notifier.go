@@ -1,5 +1,5 @@
 /*
- * Minio Cloud Storage, (C) 2015 Minio, Inc.
+ * Minio Cloud Storage, (C) 2015, 2016, 2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,61 @@ import (
 	"github.com/fatih/color"
 )
 
+// humanizeDuration converts time.Duration to human readable duration.
+func humanizeDuration(duration time.Duration) (durationStr string) {
+	days := int64(duration.Hours() / 24.0)
+	if days > 0 {
+		if days > 1 {
+			durationStr = fmt.Sprintf("%d days", days)
+		} else {
+			durationStr = fmt.Sprintf("a day")
+		}
+
+		// Skip lower components hours, minutes and seconds.
+		return durationStr
+	}
+	duration -= time.Duration(days*24) * time.Hour
+
+	hours := int64(duration.Hours())
+	if hours > 0 {
+		if hours > 1 {
+			durationStr = fmt.Sprintf("%d hours", hours)
+		} else {
+			durationStr = fmt.Sprintf("an hour")
+		}
+
+		// Skip lower components minutes and seconds.
+		return durationStr
+	}
+	duration -= time.Duration(hours) * time.Hour
+
+	minutes := int64(duration.Minutes())
+	if minutes > 0 {
+		if minutes > 1 {
+			durationStr = fmt.Sprintf("%d minutes", minutes)
+		} else {
+			durationStr = fmt.Sprintf("a minute")
+		}
+
+		// Skip lower component seconds.
+		return durationStr
+	}
+	duration -= time.Duration(minutes) * time.Minute
+
+	seconds := int64(duration.Seconds())
+	if seconds > 0 {
+		if seconds > 1 {
+			durationStr = fmt.Sprintf("%d seconds", seconds)
+		} else {
+			durationStr = fmt.Sprintf("a second")
+		}
+
+		return durationStr
+	}
+
+	return "just"
+}
+
 // colorizeUpdateMessage - inspired from Yeoman project npm package https://github.com/yeoman/update-notifier
 func colorizeUpdateMessage(updateString string, newerThan time.Duration) string {
 	// Initialize coloring.
@@ -36,14 +91,14 @@ func colorizeUpdateMessage(updateString string, newerThan time.Duration) string 
 	// Calculate length without color coding, due to ANSI color
 	// characters padded to actual string the final length is wrong
 	// than the original string length.
-	hTime := timeDurationToHumanizedDuration(newerThan)
-	line1Str := fmt.Sprintf(" Minio is %s old ", hTime.StringShort())
+	newerThanStr := humanizeDuration(newerThan)
+	line1Str := fmt.Sprintf(" Minio is %s old ", newerThanStr)
 	line2Str := fmt.Sprintf(" Update: %s ", updateString)
 	line1Length := len(line1Str)
 	line2Length := len(line2Str)
 
 	// Populate lines with color coding.
-	line1InColor := fmt.Sprintf(" Minio is %s old ", yellow(hTime.StringShort()))
+	line1InColor := fmt.Sprintf(" Minio is %s old ", yellow(newerThanStr))
 	line2InColor := fmt.Sprintf(" Update: %s ", cyan(updateString))
 
 	// calculate the rectangular box size.
