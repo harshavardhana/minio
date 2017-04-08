@@ -87,9 +87,9 @@ EXAMPLES:
 // Check for updates and print a notification message
 func checkUpdate(mode string) {
 	// Its OK to ignore any errors during getUpdateInfo() here.
-	if older, downloadURL, err := getUpdateInfo(1*time.Second, mode); err == nil {
-		if older > time.Duration(0) {
-			log.Println(colorizeUpdateMessage(downloadURL, older))
+	if durationStr, downloadURL, err := getUpdateInfo(1*time.Second, mode); err == nil {
+		if durationStr != "" {
+			log.Println(colorizeUpdateMessage(downloadURL, durationStr))
 		}
 	}
 }

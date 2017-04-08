@@ -24,27 +24,28 @@ import (
 
 func TestHumanizeDuration(t *testing.T) {
 	testCases := []struct {
-		duration       time.Duration
+		t1             time.Time
+		t2             time.Time
 		expectedResult string
 	}{
-		{1 * time.Second, "a second"},
-		{1 * time.Minute, "a minute"},
-		{1 * time.Hour, "an hour"},
-		{24 * time.Hour, "a day"},
-		{2 * time.Second, "2 seconds"},
-		{2 * time.Minute, "2 minutes"},
-		{2 * time.Hour, "2 hours"},
-		{48 * time.Hour, "2 days"},
-		{48*time.Hour + 17*time.Hour + 3*time.Minute + 10*time.Second, "2 days"},
-		{48*time.Hour + 3*time.Minute, "2 days"},
-		{7*time.Hour + 3*time.Minute, "7 hours"},
-		{3*time.Minute + 43*time.Second, "3 minutes"},
-		{43*time.Second + time.Duration(7762), "43 seconds"},
-		{time.Duration(7762), "just"},
+		{UTCNow(), UTCNow().Add(1 * time.Second), "a second old"},
+		{UTCNow(), UTCNow().Add(1 * time.Minute), "a minute old"},
+		{UTCNow(), UTCNow().Add(1 * time.Hour), "an hour old"},
+		{UTCNow(), UTCNow().Add(24 * time.Hour), "a day old"},
+		{UTCNow(), UTCNow().Add(2 * time.Second), "2 seconds old"},
+		{UTCNow(), UTCNow().Add(2 * time.Minute), "2 minutes old"},
+		{UTCNow(), UTCNow().Add(2 * time.Hour), "2 hours old"},
+		{UTCNow(), UTCNow().Add(48 * time.Hour), "2 days old"},
+		{UTCNow(), UTCNow().Add(48*time.Hour + 17*time.Hour + 3*time.Minute + 10*time.Second), "2 days old"},
+		{UTCNow(), UTCNow().Add(48*time.Hour + 3*time.Minute), "2 days old"},
+		{UTCNow(), UTCNow().Add(7*time.Hour + 3*time.Minute), "7 hours old"},
+		{UTCNow(), UTCNow().Add(3*time.Minute + 43*time.Second), "3 minutes old"},
+		{UTCNow(), UTCNow().Add(43*time.Second + time.Duration(7762)), "43 seconds old"},
+		{UTCNow(), UTCNow().Add(time.Duration(7762)), "now"},
 	}
 
 	for _, testCase := range testCases {
-		durationStr := humanizeDuration(testCase.duration)
+		durationStr := humanizeDuration(testCase.t1, testCase.t2)
 		if durationStr != testCase.expectedResult {
 			t.Fatalf("expected: %v, got: %v", testCase.expectedResult, durationStr)
 		}
@@ -53,7 +54,8 @@ func TestHumanizeDuration(t *testing.T) {
 
 // Tests update notifier string builder.
 func TestUpdateNotifier(t *testing.T) {
-	colorUpdateMsg := colorizeUpdateMessage(minioReleaseURL, time.Duration(72*time.Hour))
+	tnow := UTCNow()
+	colorUpdateMsg := colorizeUpdateMessage(minioReleaseURL, humanizeDuration(tnow.Add(72*time.Hour), tnow))
 	if !strings.Contains(colorUpdateMsg, "3 days") {
 		t.Fatal("Duration string not found in colorized update message", colorUpdateMsg)
 	}

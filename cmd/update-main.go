@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -28,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	humanize "github.com/dustin/go-humanize"
 	"github.com/fatih/color"
 	"github.com/minio/cli"
 )
@@ -235,23 +237,46 @@ func getDownloadURL() (downloadURL string) {
 	return minioReleaseURL + "minio"
 }
 
-func getUpdateInfo(timeout time.Duration, mode string) (older time.Duration, downloadURL string, err error) {
+// humanizeDuration converts time.Duration to human readable duration.
+func humanizeDuration(then, now time.Time) (durationStr string) {
+	var defaultMagnitudes = []humanize.RelTimeMagnitude{
+		{time.Second, "now", time.Second},
+		{2 * time.Second, "a second %s", 1},
+		{time.Minute, "%d seconds %s", time.Second},
+		{2 * time.Minute, "a minute %s", 1},
+		{time.Hour, "%d minutes %s", time.Minute},
+		{2 * time.Hour, "an hour %s", 1},
+		{humanize.Day, "%d hours %s", time.Hour},
+		{2 * humanize.Day, "a day %s", 1},
+		{humanize.Week, "%d days %s", humanize.Day},
+		{2 * humanize.Week, "a week %s", 1},
+		{humanize.Month, "%d weeks %s", humanize.Week},
+		{2 * humanize.Month, "a month %s", 1},
+		{humanize.Year, "%d months %s", humanize.Month},
+		{18 * humanize.Month, "an year %s", 1},
+		{2 * humanize.Year, "2 years %s", 1},
+		{humanize.LongTime, "%d years %s", humanize.Year},
+		{math.MaxInt64, "a long while %s", 1},
+	}
+	return humanize.CustomRelTime(then, now, "old", "new", defaultMagnitudes)
+}
+
+func getUpdateInfo(timeout time.Duration, mode string) (durationStr string, downloadURL string, err error) {
 	currentReleaseTime, err := GetCurrentReleaseTime()
 	if err != nil {
-		return older, downloadURL, err
+		return durationStr, downloadURL, err
 	}
 
 	latestReleaseTime, err := getLatestReleaseTime(timeout, mode)
 	if err != nil {
-		return older, downloadURL, err
+		return durationStr, downloadURL, err
 	}
 
 	if latestReleaseTime.After(currentReleaseTime) {
-		older = latestReleaseTime.Sub(currentReleaseTime)
+		durationStr = humanizeDuration(latestReleaseTime, currentReleaseTime)
 		downloadURL = getDownloadURL()
 	}
-
-	return older, downloadURL, nil
+	return durationStr, downloadURL, nil
 }
 
 func mainUpdate(ctx *cli.Context) {
@@ -265,14 +290,14 @@ func mainUpdate(ctx *cli.Context) {
 	}
 
 	minioMode := ""
-	older, downloadURL, err := getUpdateInfo(10*time.Second, minioMode)
+	durationStr, downloadURL, err := getUpdateInfo(10*time.Second, minioMode)
 	if err != nil {
 		log.Println(err)
 		os.Exit(-1)
 	}
 
-	if older != time.Duration(0) {
-		log.Println(colorizeUpdateMessage(downloadURL, older))
+	if durationStr != "" {
+		log.Println(colorizeUpdateMessage(downloadURL, durationStr))
 		os.Exit(1)
 	}
 

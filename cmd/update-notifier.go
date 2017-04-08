@@ -21,69 +21,13 @@ import (
 	"math"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/cheggaaa/pb"
 	"github.com/fatih/color"
 )
 
-// humanizeDuration converts time.Duration to human readable duration.
-func humanizeDuration(duration time.Duration) (durationStr string) {
-	days := int64(duration.Hours() / 24.0)
-	if days > 0 {
-		if days > 1 {
-			durationStr = fmt.Sprintf("%d days", days)
-		} else {
-			durationStr = fmt.Sprintf("a day")
-		}
-
-		// Skip lower components hours, minutes and seconds.
-		return durationStr
-	}
-	duration -= time.Duration(days*24) * time.Hour
-
-	hours := int64(duration.Hours())
-	if hours > 0 {
-		if hours > 1 {
-			durationStr = fmt.Sprintf("%d hours", hours)
-		} else {
-			durationStr = fmt.Sprintf("an hour")
-		}
-
-		// Skip lower components minutes and seconds.
-		return durationStr
-	}
-	duration -= time.Duration(hours) * time.Hour
-
-	minutes := int64(duration.Minutes())
-	if minutes > 0 {
-		if minutes > 1 {
-			durationStr = fmt.Sprintf("%d minutes", minutes)
-		} else {
-			durationStr = fmt.Sprintf("a minute")
-		}
-
-		// Skip lower component seconds.
-		return durationStr
-	}
-	duration -= time.Duration(minutes) * time.Minute
-
-	seconds := int64(duration.Seconds())
-	if seconds > 0 {
-		if seconds > 1 {
-			durationStr = fmt.Sprintf("%d seconds", seconds)
-		} else {
-			durationStr = fmt.Sprintf("a second")
-		}
-
-		return durationStr
-	}
-
-	return "just"
-}
-
 // colorizeUpdateMessage - inspired from Yeoman project npm package https://github.com/yeoman/update-notifier
-func colorizeUpdateMessage(updateString string, newerThan time.Duration) string {
+func colorizeUpdateMessage(updateString, durationString string) string {
 	// Initialize coloring.
 	cyan := color.New(color.FgCyan, color.Bold).SprintFunc()
 	yellow := color.New(color.FgYellow, color.Bold).SprintfFunc()
@@ -91,14 +35,13 @@ func colorizeUpdateMessage(updateString string, newerThan time.Duration) string 
 	// Calculate length without color coding, due to ANSI color
 	// characters padded to actual string the final length is wrong
 	// than the original string length.
-	newerThanStr := humanizeDuration(newerThan)
-	line1Str := fmt.Sprintf(" Minio is %s old ", newerThanStr)
+	line1Str := fmt.Sprintf(" Minio is %s ", durationString)
 	line2Str := fmt.Sprintf(" Update: %s ", updateString)
 	line1Length := len(line1Str)
 	line2Length := len(line2Str)
 
 	// Populate lines with color coding.
-	line1InColor := fmt.Sprintf(" Minio is %s old ", yellow(newerThanStr))
+	line1InColor := fmt.Sprintf(" Minio is %s ", yellow(durationString))
 	line2InColor := fmt.Sprintf(" Update: %s ", cyan(updateString))
 
 	// calculate the rectangular box size.
