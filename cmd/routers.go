@@ -87,6 +87,8 @@ func configureServerHandler(endpoints EndpointList) (http.Handler, error) {
 	var handlerFns = []HandlerFunc{
 		// Validate all the incoming paths.
 		setPathValidityHandler,
+		// Add logging handler.
+		setLoggingHandler,
 		// Network statistics
 		setHTTPStatsHandler,
 		// Limits all requests size to a maximum fixed limit

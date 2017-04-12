@@ -20,10 +20,12 @@ import (
 	"bufio"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
+	"github.com/gorilla/handlers"
 	router "github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
@@ -468,4 +470,9 @@ func (h pathValidityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.handler.ServeHTTP(w, r)
+}
+
+// Enables logging handler..
+func setLoggingHandler(h http.Handler) http.Handler {
+	return handlers.LoggingHandler(os.Stdout, h)
 }
