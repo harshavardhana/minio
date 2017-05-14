@@ -32,7 +32,7 @@ import (
 )
 
 // Returns if the prefix is a multipart upload.
-func (fs fsObjects) isMultipartUpload(bucket, prefix string) bool {
+func (fs *fsObjects) isMultipartUpload(bucket, prefix string) bool {
 	uploadsIDPath := pathJoin(fs.fsPath, bucket, prefix, uploadsJSONFile)
 	_, err := fsStatFile(uploadsIDPath)
 	if err != nil {
@@ -46,7 +46,7 @@ func (fs fsObjects) isMultipartUpload(bucket, prefix string) bool {
 }
 
 // Delete uploads.json file wrapper
-func (fs fsObjects) deleteUploadsJSON(bucket, object, uploadID string) error {
+func (fs *fsObjects) deleteUploadsJSON(bucket, object, uploadID string) error {
 	multipartBucketPath := pathJoin(fs.fsPath, minioMetaMultipartBucket)
 	uploadPath := pathJoin(multipartBucketPath, bucket, object)
 	uploadsMetaPath := pathJoin(uploadPath, uploadsJSONFile)
@@ -58,7 +58,7 @@ func (fs fsObjects) deleteUploadsJSON(bucket, object, uploadID string) error {
 
 // Removes the uploadID, called either by CompleteMultipart of AbortMultipart. If the resuling uploads
 // slice is empty then we remove/purge the file.
-func (fs fsObjects) removeUploadID(bucket, object, uploadID string, rwlk *lock.LockedFile) error {
+func (fs *fsObjects) removeUploadID(bucket, object, uploadID string, rwlk *lock.LockedFile) error {
 	uploadIDs := uploadsV1{}
 	_, err := uploadIDs.ReadFrom(rwlk)
 	if err != nil {
@@ -81,7 +81,7 @@ func (fs fsObjects) removeUploadID(bucket, object, uploadID string, rwlk *lock.L
 
 // Adds a new uploadID if no previous `uploads.json` is
 // found we initialize a new one.
-func (fs fsObjects) addUploadID(bucket, object, uploadID string, initiated time.Time, rwlk *lock.LockedFile) error {
+func (fs *fsObjects) addUploadID(bucket, object, uploadID string, initiated time.Time, rwlk *lock.LockedFile) error {
 	uploadIDs := uploadsV1{}
 
 	_, err := uploadIDs.ReadFrom(rwlk)
@@ -105,7 +105,7 @@ func (fs fsObjects) addUploadID(bucket, object, uploadID string, initiated time.
 }
 
 // listMultipartUploadIDs - list all the upload ids from a marker up to 'count'.
-func (fs fsObjects) listMultipartUploadIDs(bucketName, objectName, uploadIDMarker string, count int) ([]uploadMetadata, bool, error) {
+func (fs *fsObjects) listMultipartUploadIDs(bucketName, objectName, uploadIDMarker string, count int) ([]uploadMetadata, bool, error) {
 	var uploads []uploadMetadata
 
 	// Hold the lock so that two parallel complete-multipart-uploads
@@ -159,7 +159,7 @@ func (fs fsObjects) listMultipartUploadIDs(bucketName, objectName, uploadIDMarke
 }
 
 // listMultipartUploads - lists all multipart uploads.
-func (fs fsObjects) listMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
+func (fs *fsObjects) listMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 	result := ListMultipartsInfo{}
 	recursive := true
 	if delimiter == slashSeparator {
@@ -311,7 +311,7 @@ func (fs fsObjects) listMultipartUploads(bucket, prefix, keyMarker, uploadIDMark
 // Implements S3 compatible ListMultipartUploads API. The resulting
 // ListMultipartsInfo structure is unmarshalled directly into XML and
 // replied back to the client.
-func (fs fsObjects) ListMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
+func (fs *fsObjects) ListMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 	if err := checkListMultipartArgs(bucket, prefix, keyMarker, uploadIDMarker, delimiter, fs); err != nil {
 		return ListMultipartsInfo{}, err
 	}
@@ -330,7 +330,7 @@ func (fs fsObjects) ListMultipartUploads(bucket, prefix, keyMarker, uploadIDMark
 // incoming object at '.minio.sys/multipart/bucket/object/uploads.json' on
 // all the disks. `uploads.json` carries metadata regarding on going
 // multipart operation on the object.
-func (fs fsObjects) newMultipartUpload(bucket string, object string, meta map[string]string) (uploadID string, err error) {
+func (fs *fsObjects) newMultipartUpload(bucket string, object string, meta map[string]string) (uploadID string, err error) {
 	// Initialize `fs.json` values.
 	fsMeta := newFSMetaV1()
 
@@ -375,7 +375,7 @@ func (fs fsObjects) newMultipartUpload(bucket string, object string, meta map[st
 // subsequent request each UUID is unique.
 //
 // Implements S3 compatible initiate multipart API.
-func (fs fsObjects) NewMultipartUpload(bucket, object string, meta map[string]string) (string, error) {
+func (fs *fsObjects) NewMultipartUpload(bucket, object string, meta map[string]string) (string, error) {
 	if err := checkNewMultipartArgs(bucket, object, fs); err != nil {
 		return "", err
 	}
@@ -412,7 +412,7 @@ func partToAppend(fsMeta fsMetaV1, fsAppendMeta fsMetaV1) (part objectPartInfo, 
 // CopyObjectPart - similar to PutObjectPart but reads data from an existing
 // object. Internally incoming data is written to '.minio.sys/tmp' location
 // and safely renamed to '.minio.sys/multipart' for reach parts.
-func (fs fsObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64) (PartInfo, error) {
+func (fs *fsObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64) (PartInfo, error) {
 	if err := checkNewMultipartArgs(srcBucket, srcObject, fs); err != nil {
 		return PartInfo{}, err
 	}
@@ -444,7 +444,7 @@ func (fs fsObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, u
 // an ongoing multipart transaction. Internally incoming data is
 // written to '.minio.sys/tmp' location and safely renamed to
 // '.minio.sys/multipart' for reach parts.
-func (fs fsObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string) (PartInfo, error) {
+func (fs *fsObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string) (PartInfo, error) {
 	if err := checkPutObjectPartArgs(bucket, object, fs); err != nil {
 		return PartInfo{}, err
 	}
@@ -599,7 +599,7 @@ func (fs fsObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 // listObjectParts - wrapper scanning through
 // '.minio.sys/multipart/bucket/object/UPLOADID'. Lists all the parts
 // saved inside '.minio.sys/multipart/bucket/object/UPLOADID'.
-func (fs fsObjects) listObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
+func (fs *fsObjects) listObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
 	result := ListPartsInfo{}
 
 	uploadIDPath := pathJoin(bucket, object, uploadID)
@@ -671,7 +671,7 @@ func (fs fsObjects) listObjectParts(bucket, object, uploadID string, partNumberM
 // Implements S3 compatible ListObjectParts API. The resulting
 // ListPartsInfo structure is unmarshalled directly into XML and
 // replied back to the client.
-func (fs fsObjects) ListObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
+func (fs *fsObjects) ListObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
 	if err := checkListPartsArgs(bucket, object, fs); err != nil {
 		return ListPartsInfo{}, err
 	}
@@ -701,7 +701,7 @@ func (fs fsObjects) ListObjectParts(bucket, object, uploadID string, partNumberM
 // md5sums of all the parts.
 //
 // Implements S3 compatible Complete multipart API.
-func (fs fsObjects) CompleteMultipartUpload(bucket string, object string, uploadID string, parts []completePart) (ObjectInfo, error) {
+func (fs *fsObjects) CompleteMultipartUpload(bucket string, object string, uploadID string, parts []completePart) (ObjectInfo, error) {
 	if err := checkCompleteMultipartArgs(bucket, object, fs); err != nil {
 		return ObjectInfo{}, err
 	}
@@ -917,7 +917,7 @@ func (fs fsObjects) CompleteMultipartUpload(bucket string, object string, upload
 // that this is an atomic idempotent operation. Subsequent calls have
 // no affect and further requests to the same uploadID would not be
 // honored.
-func (fs fsObjects) AbortMultipartUpload(bucket, object, uploadID string) error {
+func (fs *fsObjects) AbortMultipartUpload(bucket, object, uploadID string) error {
 	if err := checkAbortMultipartArgs(bucket, object, fs); err != nil {
 		return err
 	}

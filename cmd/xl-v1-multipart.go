@@ -33,7 +33,7 @@ import (
 )
 
 // updateUploadJSON - add or remove upload ID info in all `uploads.json`.
-func (xl xlObjects) updateUploadJSON(bucket, object, uploadID string, initiated time.Time, isRemove bool) error {
+func (xl *xlObjects) updateUploadJSON(bucket, object, uploadID string, initiated time.Time, isRemove bool) error {
 	uploadsPath := path.Join(bucket, object, uploadsJSONFile)
 	tmpUploadsPath := mustGetUUID()
 
@@ -152,17 +152,17 @@ func (xl xlObjects) updateUploadJSON(bucket, object, uploadID string, initiated 
 }
 
 // addUploadID - add upload ID and its initiated time to 'uploads.json'.
-func (xl xlObjects) addUploadID(bucket, object string, uploadID string, initiated time.Time) error {
+func (xl *xlObjects) addUploadID(bucket, object string, uploadID string, initiated time.Time) error {
 	return xl.updateUploadJSON(bucket, object, uploadID, initiated, false)
 }
 
 // removeUploadID - remove upload ID in 'uploads.json'.
-func (xl xlObjects) removeUploadID(bucket, object string, uploadID string) error {
+func (xl *xlObjects) removeUploadID(bucket, object string, uploadID string) error {
 	return xl.updateUploadJSON(bucket, object, uploadID, time.Time{}, true)
 }
 
 // Returns if the prefix is a multipart upload.
-func (xl xlObjects) isMultipartUpload(bucket, prefix string) bool {
+func (xl *xlObjects) isMultipartUpload(bucket, prefix string) bool {
 	for _, disk := range xl.getLoadBalancedDisks() {
 		if disk == nil {
 			continue
@@ -181,13 +181,13 @@ func (xl xlObjects) isMultipartUpload(bucket, prefix string) bool {
 }
 
 // isUploadIDExists - verify if a given uploadID exists and is valid.
-func (xl xlObjects) isUploadIDExists(bucket, object, uploadID string) bool {
+func (xl *xlObjects) isUploadIDExists(bucket, object, uploadID string) bool {
 	uploadIDPath := path.Join(bucket, object, uploadID)
 	return xl.isObject(minioMetaMultipartBucket, uploadIDPath)
 }
 
 // Removes part given by partName belonging to a mulitpart upload from minioMetaBucket
-func (xl xlObjects) removeObjectPart(bucket, object, uploadID, partName string) {
+func (xl *xlObjects) removeObjectPart(bucket, object, uploadID, partName string) {
 	curpartPath := path.Join(bucket, object, uploadID, partName)
 	wg := sync.WaitGroup{}
 	for i, disk := range xl.storageDisks {
@@ -207,7 +207,7 @@ func (xl xlObjects) removeObjectPart(bucket, object, uploadID, partName string) 
 }
 
 // statPart - returns fileInfo structure for a successful stat on part file.
-func (xl xlObjects) statPart(bucket, object, uploadID, partName string) (fileInfo FileInfo, err error) {
+func (xl *xlObjects) statPart(bucket, object, uploadID, partName string) (fileInfo FileInfo, err error) {
 	var ignoredErrs []error
 	partNamePath := path.Join(bucket, object, uploadID, partName)
 	for _, disk := range xl.getLoadBalancedDisks() {
@@ -276,7 +276,7 @@ func commitXLMetadata(disks []StorageAPI, srcBucket, srcPrefix, dstBucket, dstPr
 }
 
 // listMultipartUploads - lists all multipart uploads.
-func (xl xlObjects) listMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
+func (xl *xlObjects) listMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 	result := ListMultipartsInfo{
 		IsTruncated: true,
 		MaxUploads:  maxUploads,
@@ -448,7 +448,7 @@ func (xl xlObjects) listMultipartUploads(bucket, prefix, keyMarker, uploadIDMark
 // Implements S3 compatible ListMultipartUploads API. The resulting
 // ListMultipartsInfo structure is unmarshalled directly into XML and
 // replied back to the client.
-func (xl xlObjects) ListMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
+func (xl *xlObjects) ListMultipartUploads(bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 	if err := checkListMultipartArgs(bucket, prefix, keyMarker, uploadIDMarker, delimiter, xl); err != nil {
 		return ListMultipartsInfo{}, err
 	}
@@ -464,7 +464,7 @@ func (xl xlObjects) ListMultipartUploads(bucket, prefix, keyMarker, uploadIDMark
 // '.minio.sys/multipart/bucket/object/uploads.json' on all the
 // disks. `uploads.json` carries metadata regarding on-going multipart
 // operation(s) on the object.
-func (xl xlObjects) newMultipartUpload(bucket string, object string, meta map[string]string) (string, error) {
+func (xl *xlObjects) newMultipartUpload(bucket string, object string, meta map[string]string) (string, error) {
 	xlMeta := newXLMetaV1(object, xl.dataBlocks, xl.parityBlocks)
 	// If not set default to "application/octet-stream"
 	if meta["content-type"] == "" {
@@ -520,7 +520,7 @@ func (xl xlObjects) newMultipartUpload(bucket string, object string, meta map[st
 // subsequent request each UUID is unique.
 //
 // Implements S3 compatible initiate multipart API.
-func (xl xlObjects) NewMultipartUpload(bucket, object string, meta map[string]string) (string, error) {
+func (xl *xlObjects) NewMultipartUpload(bucket, object string, meta map[string]string) (string, error) {
 	if err := checkNewMultipartArgs(bucket, object, xl); err != nil {
 		return "", err
 	}
@@ -536,7 +536,7 @@ func (xl xlObjects) NewMultipartUpload(bucket, object string, meta map[string]st
 // data is read from an existing object.
 //
 // Implements S3 compatible Upload Part Copy API.
-func (xl xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64) (PartInfo, error) {
+func (xl *xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64) (PartInfo, error) {
 	if err := checkNewMultipartArgs(srcBucket, srcObject, xl); err != nil {
 		return PartInfo{}, err
 	}
@@ -570,7 +570,7 @@ func (xl xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, u
 // of the multipart transaction.
 //
 // Implements S3 compatible Upload Part API.
-func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string) (PartInfo, error) {
+func (xl *xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string) (PartInfo, error) {
 	if err := checkPutObjectPartArgs(bucket, object, xl); err != nil {
 		return PartInfo{}, err
 	}
@@ -770,7 +770,7 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 
 // listObjectParts - wrapper reading `xl.json` for a given object and
 // uploadID. Lists all the parts captured inside `xl.json` content.
-func (xl xlObjects) listObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
+func (xl *xlObjects) listObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
 	result := ListPartsInfo{}
 
 	uploadIDPath := path.Join(bucket, object, uploadID)
@@ -838,7 +838,7 @@ func (xl xlObjects) listObjectParts(bucket, object, uploadID string, partNumberM
 // Implements S3 compatible ListObjectParts API. The resulting
 // ListPartsInfo structure is unmarshalled directly into XML and
 // replied back to the client.
-func (xl xlObjects) ListObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
+func (xl *xlObjects) ListObjectParts(bucket, object, uploadID string, partNumberMarker, maxParts int) (ListPartsInfo, error) {
 	if err := checkListPartsArgs(bucket, object, xl); err != nil {
 		return ListPartsInfo{}, err
 	}
@@ -863,7 +863,7 @@ func (xl xlObjects) ListObjectParts(bucket, object, uploadID string, partNumberM
 // md5sums of all the parts.
 //
 // Implements S3 compatible Complete multipart API.
-func (xl xlObjects) CompleteMultipartUpload(bucket string, object string, uploadID string, parts []completePart) (ObjectInfo, error) {
+func (xl *xlObjects) CompleteMultipartUpload(bucket string, object string, uploadID string, parts []completePart) (ObjectInfo, error) {
 	if err := checkCompleteMultipartArgs(bucket, object, xl); err != nil {
 		return ObjectInfo{}, err
 	}
@@ -1072,7 +1072,7 @@ func (xl xlObjects) CompleteMultipartUpload(bucket string, object string, upload
 }
 
 // Wrapper which removes all the uploaded parts.
-func (xl xlObjects) cleanupUploadedParts(bucket, object, uploadID string) error {
+func (xl *xlObjects) cleanupUploadedParts(bucket, object, uploadID string) error {
 	var errs = make([]error, len(xl.storageDisks))
 	var wg = &sync.WaitGroup{}
 
@@ -1106,7 +1106,7 @@ func (xl xlObjects) cleanupUploadedParts(bucket, object, uploadID string) error 
 // transaction, deletes uploadID entry from `uploads.json` and purges
 // the directory at '.minio.sys/multipart/bucket/object/uploadID' holding
 // all the upload parts.
-func (xl xlObjects) abortMultipartUpload(bucket, object, uploadID string) (err error) {
+func (xl *xlObjects) abortMultipartUpload(bucket, object, uploadID string) (err error) {
 	// Cleanup all uploaded parts.
 	if err = xl.cleanupUploadedParts(bucket, object, uploadID); err != nil {
 		return toObjectErr(err, bucket, object)
@@ -1139,7 +1139,7 @@ func (xl xlObjects) abortMultipartUpload(bucket, object, uploadID string) (err e
 // Implements S3 compatible Abort multipart API, slight difference is
 // that this is an atomic idempotent operation. Subsequent calls have
 // no affect and further requests to the same uploadID would not be honored.
-func (xl xlObjects) AbortMultipartUpload(bucket, object, uploadID string) error {
+func (xl *xlObjects) AbortMultipartUpload(bucket, object, uploadID string) error {
 	if err := checkAbortMultipartArgs(bucket, object, xl); err != nil {
 		return err
 	}

@@ -23,6 +23,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/signal"
 	"path"
@@ -280,7 +281,7 @@ func newFSObjectLayer(fsPath string) (ObjectLayer, error) {
 }
 
 // Should be called when process shuts down.
-func (fs fsObjects) Shutdown() error {
+func (fs *fsObjects) Shutdown() error {
 	// Close the format.json read lock.
 	fs.rwPool.Close(pathJoin(fs.fsPath, minioMetaBucket, fsFormatJSONFile))
 
@@ -289,7 +290,7 @@ func (fs fsObjects) Shutdown() error {
 }
 
 // StorageInfo - returns underlying storage statistics.
-func (fs fsObjects) StorageInfo() StorageInfo {
+func (fs *fsObjects) StorageInfo() StorageInfo {
 	info, err := getDiskInfo(preparePath(fs.fsPath))
 	errorIf(err, "Unable to get disk info %#v", fs.fsPath)
 	storageInfo := StorageInfo{
@@ -305,7 +306,7 @@ func (fs fsObjects) StorageInfo() StorageInfo {
 // getBucketDir - will convert incoming bucket names to
 // corresponding valid bucket names on the backend in a platform
 // compatible way for all operating systems.
-func (fs fsObjects) getBucketDir(bucket string) (string, error) {
+func (fs *fsObjects) getBucketDir(bucket string) (string, error) {
 	// Verify if bucket is valid.
 	if !IsValidBucketName(bucket) {
 		return "", traceError(BucketNameInvalid{Bucket: bucket})
@@ -315,7 +316,7 @@ func (fs fsObjects) getBucketDir(bucket string) (string, error) {
 	return bucketDir, nil
 }
 
-func (fs fsObjects) statBucketDir(bucket string) (os.FileInfo, error) {
+func (fs *fsObjects) statBucketDir(bucket string) (os.FileInfo, error) {
 	bucketDir, err := fs.getBucketDir(bucket)
 	if err != nil {
 		return nil, err
@@ -327,9 +328,10 @@ func (fs fsObjects) statBucketDir(bucket string) (os.FileInfo, error) {
 	return st, nil
 }
 
-// MakeBucket - create a new bucket, returns if it
-// already exists.
-func (fs fsObjects) MakeBucketWithLocation(bucket, location string) error {
+// MakeBucketWithLocation - create a new bucket, returns if it
+// already exists, location param is not valid for the FS
+// backend and is ignored.
+func (fs *fsObjects) MakeBucketWithLocation(bucket, location string) error {
 	bucketDir, err := fs.getBucketDir(bucket)
 	if err != nil {
 		return toObjectErr(err, bucket)
@@ -343,7 +345,7 @@ func (fs fsObjects) MakeBucketWithLocation(bucket, location string) error {
 }
 
 // GetBucketInfo - fetch bucket metadata info.
-func (fs fsObjects) GetBucketInfo(bucket string) (BucketInfo, error) {
+func (fs *fsObjects) GetBucketInfo(bucket string) (BucketInfo, error) {
 	st, err := fs.statBucketDir(bucket)
 	if err != nil {
 		return BucketInfo{}, toObjectErr(err, bucket)
@@ -358,7 +360,7 @@ func (fs fsObjects) GetBucketInfo(bucket string) (BucketInfo, error) {
 }
 
 // ListBuckets - list all s3 compatible buckets (directories) at fsPath.
-func (fs fsObjects) ListBuckets() ([]BucketInfo, error) {
+func (fs *fsObjects) ListBuckets() ([]BucketInfo, error) {
 	if err := checkPathLength(fs.fsPath); err != nil {
 		return nil, traceError(err)
 	}
@@ -402,7 +404,7 @@ func (fs fsObjects) ListBuckets() ([]BucketInfo, error) {
 
 // DeleteBucket - delete a bucket and all the metadata associated
 // with the bucket including pending multipart, object metadata.
-func (fs fsObjects) DeleteBucket(bucket string) error {
+func (fs *fsObjects) DeleteBucket(bucket string) error {
 	bucketDir, err := fs.getBucketDir(bucket)
 	if err != nil {
 		return toObjectErr(err, bucket)
@@ -433,7 +435,7 @@ func (fs fsObjects) DeleteBucket(bucket string) error {
 // CopyObject - copy object source object to destination object.
 // if source object and destination object are same we only
 // update metadata.
-func (fs fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, metadata map[string]string) (ObjectInfo, error) {
+func (fs *fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, metadata map[string]string) (ObjectInfo, error) {
 	if _, err := fs.statBucketDir(srcBucket); err != nil {
 		return ObjectInfo{}, toObjectErr(err, srcBucket)
 	}
@@ -500,7 +502,7 @@ func (fs fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (fs fsObjects) GetObject(bucket, object string, offset int64, length int64, writer io.Writer) (err error) {
+func (fs *fsObjects) GetObject(bucket, object string, offset int64, length int64, writer io.Writer) (err error) {
 	if err = checkGetObjArgs(bucket, object); err != nil {
 		return err
 	}
@@ -560,7 +562,7 @@ func (fs fsObjects) GetObject(bucket, object string, offset int64, length int64,
 }
 
 // getObjectInfo - wrapper for reading object metadata and constructs ObjectInfo.
-func (fs fsObjects) getObjectInfo(bucket, object string) (ObjectInfo, error) {
+func (fs *fsObjects) getObjectInfo(bucket, object string) (ObjectInfo, error) {
 	fsMeta := fsMetaV1{}
 	fsMetaPath := pathJoin(fs.fsPath, minioMetaBucket, bucketMetaPrefix, bucket, objectMetaPrefix, object, fsMetaJSONFile)
 
@@ -595,7 +597,7 @@ func (fs fsObjects) getObjectInfo(bucket, object string) (ObjectInfo, error) {
 }
 
 // GetObjectInfo - reads object metadata and replies back ObjectInfo.
-func (fs fsObjects) GetObjectInfo(bucket, object string) (ObjectInfo, error) {
+func (fs *fsObjects) GetObjectInfo(bucket, object string) (ObjectInfo, error) {
 	if err := checkGetObjArgs(bucket, object); err != nil {
 		return ObjectInfo{}, err
 	}
@@ -610,7 +612,7 @@ func (fs fsObjects) GetObjectInfo(bucket, object string) (ObjectInfo, error) {
 // This function does the following check, suppose
 // object is "a/b/c/d", stat makes sure that objects ""a/b/c""
 // "a/b" and "a" do not exist.
-func (fs fsObjects) parentDirIsObject(bucket, parent string) bool {
+func (fs *fsObjects) parentDirIsObject(bucket, parent string) bool {
 	var isParentDirObject func(string) bool
 	isParentDirObject = func(p string) bool {
 		if p == "." {
@@ -630,7 +632,7 @@ func (fs fsObjects) parentDirIsObject(bucket, parent string) bool {
 // until EOF, writes data directly to configured filesystem path.
 // Additionally writes `fs.json` which carries the necessary metadata
 // for future object operations.
-func (fs fsObjects) PutObject(bucket string, object string, size int64, data io.Reader, metadata map[string]string, sha256sum string) (objInfo ObjectInfo, retErr error) {
+func (fs *fsObjects) PutObject(bucket string, object string, size int64, data io.Reader, metadata map[string]string, sha256sum string) (objInfo ObjectInfo, retErr error) {
 	var err error
 
 	// Validate if bucket name is valid and exists.
@@ -786,7 +788,7 @@ func (fs fsObjects) PutObject(bucket string, object string, size int64, data io.
 
 // DeleteObject - deletes an object from a bucket, this operation is destructive
 // and there are no rollbacks supported.
-func (fs fsObjects) DeleteObject(bucket, object string) error {
+func (fs *fsObjects) DeleteObject(bucket, object string) error {
 	if err := checkDelObjArgs(bucket, object); err != nil {
 		return err
 	}
@@ -832,7 +834,7 @@ var fsTreeWalkIgnoredErrs = append(baseIgnoredErrs, []error{
 // Returns function "listDir" of the type listDirFunc.
 // isLeaf - is used by listDir function to check if an entry
 // is a leaf or non-leaf entry.
-func (fs fsObjects) listDirFactory(isLeaf isLeafFunc) listDirFunc {
+func (fs *fsObjects) listDirFactory(isLeaf isLeafFunc) listDirFunc {
 	// listDir - lists all the entries at a given prefix and given entry in the prefix.
 	listDir := func(bucket, prefixDir, prefixEntry string) (entries []string, delayIsLeaf bool, err error) {
 		entries, err = readDir(pathJoin(fs.fsPath, bucket, prefixDir))
@@ -849,7 +851,7 @@ func (fs fsObjects) listDirFactory(isLeaf isLeafFunc) listDirFunc {
 
 // getObjectETag is a helper function, which returns only the md5sum
 // of the file on the disk.
-func (fs fsObjects) getObjectETag(bucket, entry string) (string, error) {
+func (fs *fsObjects) getObjectETag(bucket, entry string) (string, error) {
 	fsMetaPath := pathJoin(fs.fsPath, minioMetaBucket, bucketMetaPrefix, bucket, objectMetaPrefix, entry, fsMetaJSONFile)
 
 	// Read `fs.json` to perhaps contend with
@@ -888,7 +890,7 @@ func (fs fsObjects) getObjectETag(bucket, entry string) (string, error) {
 
 // ListObjects - list all objects at prefix upto maxKeys., optionally delimited by '/'. Maintains the list pool
 // state for future re-entrant list requests.
-func (fs fsObjects) ListObjects(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
+func (fs *fsObjects) ListObjects(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
 	if err := checkListObjsArgs(bucket, prefix, marker, delimiter, fs); err != nil {
 		return ListObjectsInfo{}, err
 	}
@@ -1027,26 +1029,26 @@ func (fs fsObjects) ListObjects(bucket, prefix, marker, delimiter string, maxKey
 }
 
 // HealObject - no-op for fs. Valid only for XL.
-func (fs fsObjects) HealObject(bucket, object string) (int, int, error) {
+func (fs *fsObjects) HealObject(bucket, object string) (int, int, error) {
 	return 0, 0, traceError(NotImplemented{})
 }
 
 // HealBucket - no-op for fs, Valid only for XL.
-func (fs fsObjects) HealBucket(bucket string) error {
+func (fs *fsObjects) HealBucket(bucket string) error {
 	return traceError(NotImplemented{})
 }
 
 // ListObjectsHeal - list all objects to be healed. Valid only for XL
-func (fs fsObjects) ListObjectsHeal(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
+func (fs *fsObjects) ListObjectsHeal(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
 	return ListObjectsInfo{}, traceError(NotImplemented{})
 }
 
 // ListBucketsHeal - list all buckets to be healed. Valid only for XL
-func (fs fsObjects) ListBucketsHeal() ([]BucketInfo, error) {
+func (fs *fsObjects) ListBucketsHeal() ([]BucketInfo, error) {
 	return []BucketInfo{}, traceError(NotImplemented{})
 }
 
-func (fs fsObjects) ListUploadsHeal(bucket, prefix, marker, uploadIDMarker,
+func (fs *fsObjects) ListUploadsHeal(bucket, prefix, marker, uploadIDMarker,
 	delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 	return ListMultipartsInfo{}, traceError(NotImplemented{})
 }

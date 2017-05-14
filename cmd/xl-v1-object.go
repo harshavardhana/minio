@@ -36,7 +36,7 @@ import (
 var objectOpIgnoredErrs = append(baseIgnoredErrs, errDiskAccessDenied)
 
 // prepareFile hints the bottom layer to optimize the creation of a new object
-func (xl xlObjects) prepareFile(bucket, object string, size int64, onlineDisks []StorageAPI, blockSize int64, dataBlocks int) error {
+func (xl *xlObjects) prepareFile(bucket, object string, size int64, onlineDisks []StorageAPI, blockSize int64, dataBlocks int) error {
 	pErrs := make([]error, len(onlineDisks))
 	// Calculate the real size of the part in one disk.
 	actualSize := xl.sizeOnDisk(size, blockSize, dataBlocks)
@@ -59,7 +59,7 @@ func (xl xlObjects) prepareFile(bucket, object string, size int64, onlineDisks [
 // CopyObject - copy object source object to destination object.
 // if source object and destination object are same we only
 // update metadata.
-func (xl xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, metadata map[string]string) (ObjectInfo, error) {
+func (xl *xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, metadata map[string]string) (ObjectInfo, error) {
 	// Read metadata associated with the object from all disks.
 	metaArr, errs := readAllXLMetadata(xl.storageDisks, srcBucket, srcObject)
 	if reducedErr := reduceReadQuorumErrs(errs, objectOpIgnoredErrs, xl.readQuorum); reducedErr != nil {
@@ -134,7 +134,7 @@ func (xl xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer) error {
+func (xl *xlObjects) GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer) error {
 	if err := checkGetObjArgs(bucket, object); err != nil {
 		return err
 	}
@@ -303,7 +303,7 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 }
 
 // GetObjectInfo - reads object metadata and replies back ObjectInfo.
-func (xl xlObjects) GetObjectInfo(bucket, object string) (ObjectInfo, error) {
+func (xl *xlObjects) GetObjectInfo(bucket, object string) (ObjectInfo, error) {
 	if err := checkGetObjArgs(bucket, object); err != nil {
 		return ObjectInfo{}, err
 	}
@@ -316,7 +316,7 @@ func (xl xlObjects) GetObjectInfo(bucket, object string) (ObjectInfo, error) {
 }
 
 // getObjectInfo - wrapper for reading object metadata and constructs ObjectInfo.
-func (xl xlObjects) getObjectInfo(bucket, object string) (objInfo ObjectInfo, err error) {
+func (xl *xlObjects) getObjectInfo(bucket, object string) (objInfo ObjectInfo, err error) {
 	// Extracts xlStat and xlMetaMap.
 	xlStat, xlMetaMap, err := xl.readXLMetaStat(bucket, object)
 	if err != nil {
@@ -439,7 +439,7 @@ func renameObject(disks []StorageAPI, srcBucket, srcObject, dstBucket, dstObject
 // until EOF, erasure codes the data across all disk and additionally
 // writes `xl.json` which carries the necessary metadata for future
 // object operations.
-func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.Reader, metadata map[string]string, sha256sum string) (objInfo ObjectInfo, err error) {
+func (xl *xlObjects) PutObject(bucket string, object string, size int64, data io.Reader, metadata map[string]string, sha256sum string) (objInfo ObjectInfo, err error) {
 	// This is a special case with size as '0' and object ends with
 	// a slash separator, we treat it like a valid operation and
 	// return success.
@@ -728,7 +728,7 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 // deleteObject - wrapper for delete object, deletes an object from
 // all the disks in parallel, including `xl.json` associated with the
 // object.
-func (xl xlObjects) deleteObject(bucket, object string) error {
+func (xl *xlObjects) deleteObject(bucket, object string) error {
 	// Initialize sync waitgroup.
 	var wg = &sync.WaitGroup{}
 
@@ -759,7 +759,7 @@ func (xl xlObjects) deleteObject(bucket, object string) error {
 // DeleteObject - deletes an object, this call doesn't necessary reply
 // any error as it is not necessary for the handler to reply back a
 // response to the client request.
-func (xl xlObjects) DeleteObject(bucket, object string) (err error) {
+func (xl *xlObjects) DeleteObject(bucket, object string) (err error) {
 	if err = checkDelObjArgs(bucket, object); err != nil {
 		return err
 	}

@@ -179,7 +179,7 @@ func xlShouldHeal(disks []StorageAPI, partsMetadata []xlMetaV1, errs []error, bu
 // xlHealStat - returns a structure which describes how many data,
 // parity erasure blocks are missing and if it is possible to heal
 // with the blocks present.
-func xlHealStat(xl xlObjects, partsMetadata []xlMetaV1, errs []error) HealObjectInfo {
+func xlHealStat(xl *xlObjects, partsMetadata []xlMetaV1, errs []error) HealObjectInfo {
 	// Less than quorum erasure coded blocks of the object have the same create time.
 	// This object can't be healed with the information we have.
 	modTime, count := commonTime(listObjectModtimes(partsMetadata, errs))

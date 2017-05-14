@@ -59,7 +59,7 @@ type bgAppendPartsInfo struct {
 }
 
 // Called after a part is uploaded so that it can be appended in the background.
-func (fs fsObjects) append(bucket, object, uploadID string, meta fsMetaV1) chan error {
+func (fs *fsObjects) append(bucket, object, uploadID string, meta fsMetaV1) chan error {
 	fs.bgAppend.Lock()
 	info, ok := fs.bgAppend.infoMap[uploadID]
 	if !ok {
@@ -122,7 +122,7 @@ func (fs *fsObjects) complete(bucket, object, uploadID string, meta fsMetaV1) er
 }
 
 // Called after complete-multipart-upload or abort-multipart-upload so that the appendParts go-routine is not left dangling.
-func (fs fsObjects) abort(uploadID string) {
+func (fs *fsObjects) abort(uploadID string) {
 	fs.bgAppend.Lock()
 	defer fs.bgAppend.Unlock()
 
@@ -137,7 +137,7 @@ func (fs fsObjects) abort(uploadID string) {
 }
 
 // This is run as a go-routine that appends the parts in the background.
-func (fs fsObjects) appendParts(bucket, object, uploadID string, info bgAppendPartsInfo) {
+func (fs *fsObjects) appendParts(bucket, object, uploadID string, info bgAppendPartsInfo) {
 	appendPath := pathJoin(fs.fsPath, minioMetaTmpBucket, fs.fsUUID, uploadID)
 	// Holds the list of parts that is already appended to the "append" file.
 	appendMeta := fsMetaV1{}
@@ -207,7 +207,7 @@ func (fs fsObjects) appendParts(bucket, object, uploadID string, info bgAppendPa
 
 // Appends the "part" to the append-file inside "tmp/" that finally gets moved to the actual location
 // upon complete-multipart-upload.
-func (fs fsObjects) appendPart(bucket, object, uploadID string, part objectPartInfo, buf []byte) error {
+func (fs *fsObjects) appendPart(bucket, object, uploadID string, part objectPartInfo, buf []byte) error {
 	partPath := pathJoin(fs.fsPath, minioMetaMultipartBucket, bucket, object, uploadID, part.Name)
 
 	var offset int64

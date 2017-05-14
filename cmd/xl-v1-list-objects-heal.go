@@ -69,7 +69,7 @@ func listDirHealFactory(isLeaf isLeafFunc, disks ...StorageAPI) listDirFunc {
 }
 
 // listObjectsHeal - wrapper function implemented over file tree walk.
-func (xl xlObjects) listObjectsHeal(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
+func (xl *xlObjects) listObjectsHeal(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
 	// Default is recursive, if delimiter is set then list non recursive.
 	recursive := true
 	if delimiter == slashSeparator {
@@ -160,7 +160,7 @@ func (xl xlObjects) listObjectsHeal(bucket, prefix, marker, delimiter string, ma
 }
 
 // ListObjects - list all objects at prefix, delimited by '/'.
-func (xl xlObjects) ListObjectsHeal(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
+func (xl *xlObjects) ListObjectsHeal(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
 	if err := checkListObjsArgs(bucket, prefix, marker, delimiter, xl); err != nil {
 		return ListObjectsInfo{}, err
 	}
@@ -196,7 +196,7 @@ func (xl xlObjects) ListObjectsHeal(bucket, prefix, marker, delimiter string, ma
 
 // ListUploadsHeal - lists ongoing multipart uploads that require
 // healing in one or more disks.
-func (xl xlObjects) ListUploadsHeal(bucket, prefix, marker, uploadIDMarker,
+func (xl *xlObjects) ListUploadsHeal(bucket, prefix, marker, uploadIDMarker,
 	delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 
 	// For delimiter and prefix as '/' we do not list anything at all
@@ -244,7 +244,7 @@ func fetchMultipartUploadIDs(bucket, keyMarker, uploadIDMarker string,
 
 // listMultipartUploadsHeal - Returns a list of incomplete multipart
 // uploads that need to be healed.
-func (xl xlObjects) listMultipartUploadsHeal(bucket, prefix, keyMarker,
+func (xl *xlObjects) listMultipartUploadsHeal(bucket, prefix, keyMarker,
 	uploadIDMarker, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 
 	result := ListMultipartsInfo{

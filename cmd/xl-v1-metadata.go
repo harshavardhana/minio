@@ -296,7 +296,7 @@ func pickValidXLMeta(metaArr []xlMetaV1, modTime time.Time) (xlMetaV1, error) {
 var objMetadataOpIgnoredErrs = append(baseIgnoredErrs, errDiskAccessDenied, errVolumeNotFound, errFileNotFound, errFileAccessDenied, errCorruptedFormat)
 
 // readXLMetaParts - returns the XL Metadata Parts from xl.json of one of the disks picked at random.
-func (xl xlObjects) readXLMetaParts(bucket, object string) (xlMetaParts []objectPartInfo, err error) {
+func (xl *xlObjects) readXLMetaParts(bucket, object string) (xlMetaParts []objectPartInfo, err error) {
 	var ignoredErrs []error
 	for _, disk := range xl.getLoadBalancedDisks() {
 		if disk == nil {
@@ -322,7 +322,7 @@ func (xl xlObjects) readXLMetaParts(bucket, object string) (xlMetaParts []object
 }
 
 // readXLMetaStat - return xlMetaV1.Stat and xlMetaV1.Meta from  one of the disks picked at random.
-func (xl xlObjects) readXLMetaStat(bucket, object string) (xlStat statInfo, xlMeta map[string]string, err error) {
+func (xl *xlObjects) readXLMetaStat(bucket, object string) (xlStat statInfo, xlMeta map[string]string, err error) {
 	var ignoredErrs []error
 	for _, disk := range xl.getLoadBalancedDisks() {
 		if disk == nil {

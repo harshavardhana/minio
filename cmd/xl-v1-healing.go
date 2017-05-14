@@ -58,7 +58,7 @@ func healFormatXL(storageDisks []StorageAPI) (err error) {
 // Heals a bucket if it doesn't exist on one of the disks, additionally
 // also heals the missing entries for bucket metadata files
 // `policy.json, notification.xml, listeners.json`.
-func (xl xlObjects) HealBucket(bucket string) error {
+func (xl *xlObjects) HealBucket(bucket string) error {
 	if err := checkBucketExist(bucket, xl); err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func reduceHealStatus(status []healStatus) healStatus {
 // bucketHealStatus - returns the heal status of the provided bucket. Internally,
 // this function lists all object heal status of objects inside meta bucket config
 // directory and returns the worst heal status that can be found
-func (xl xlObjects) bucketHealStatus(bucketName string) (healStatus, error) {
+func (xl *xlObjects) bucketHealStatus(bucketName string) (healStatus, error) {
 	// A list of all the bucket config files
 	configFiles := []string{bucketPolicyConfig, bucketNotificationConfig, bucketListenerConfig}
 	// The status of buckets config files
@@ -245,7 +245,7 @@ func (xl xlObjects) bucketHealStatus(bucketName string) (healStatus, error) {
 }
 
 // ListBucketsHeal - Find all buckets that need to be healed
-func (xl xlObjects) ListBucketsHeal() ([]BucketInfo, error) {
+func (xl *xlObjects) ListBucketsHeal() ([]BucketInfo, error) {
 	listBuckets := []BucketInfo{}
 	// List all buckets that can be found in all disks
 	buckets, occ, err := listAllBuckets(xl.storageDisks)
@@ -496,7 +496,7 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 // FIXME: If an object object was deleted and one disk was down,
 // and later the disk comes back up again, heal on the object
 // should delete it.
-func (xl xlObjects) HealObject(bucket, object string) (int, int, error) {
+func (xl *xlObjects) HealObject(bucket, object string) (int, int, error) {
 	// Lock the object before healing.
 	objectLock := globalNSMutex.NewNSLock(bucket, object)
 	objectLock.RLock()

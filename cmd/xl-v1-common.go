@@ -19,7 +19,7 @@ package cmd
 import "path"
 
 // getLoadBalancedDisks - fetches load balanced (sufficiently randomized) disk slice.
-func (xl xlObjects) getLoadBalancedDisks() (disks []StorageAPI) {
+func (xl *xlObjects) getLoadBalancedDisks() (disks []StorageAPI) {
 	// Based on the random shuffling return back randomized disks.
 	for _, i := range hashOrder(UTCNow().String(), len(xl.storageDisks)) {
 		disks = append(disks, xl.storageDisks[i-1])
@@ -30,7 +30,7 @@ func (xl xlObjects) getLoadBalancedDisks() (disks []StorageAPI) {
 // This function does the following check, suppose
 // object is "a/b/c/d", stat makes sure that objects ""a/b/c""
 // "a/b" and "a" do not exist.
-func (xl xlObjects) parentDirIsObject(bucket, parent string) bool {
+func (xl *xlObjects) parentDirIsObject(bucket, parent string) bool {
 	var isParentDirObject func(string) bool
 	isParentDirObject = func(p string) bool {
 		if p == "." {
@@ -48,7 +48,7 @@ func (xl xlObjects) parentDirIsObject(bucket, parent string) bool {
 
 // isObject - returns `true` if the prefix is an object i.e if
 // `xl.json` exists at the leaf, false otherwise.
-func (xl xlObjects) isObject(bucket, prefix string) (ok bool) {
+func (xl *xlObjects) isObject(bucket, prefix string) (ok bool) {
 	for _, disk := range xl.getLoadBalancedDisks() {
 		if disk == nil {
 			continue
@@ -68,7 +68,7 @@ func (xl xlObjects) isObject(bucket, prefix string) (ok bool) {
 }
 
 // Calculate the space occupied by an object in a single disk
-func (xl xlObjects) sizeOnDisk(fileSize int64, blockSize int64, dataBlocks int) int64 {
+func (xl *xlObjects) sizeOnDisk(fileSize int64, blockSize int64, dataBlocks int) int64 {
 	numBlocks := fileSize / blockSize
 	chunkSize := getChunkSize(blockSize, dataBlocks)
 	sizeInDisk := numBlocks * chunkSize

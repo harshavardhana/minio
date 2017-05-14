@@ -46,7 +46,7 @@ func listDirFactory(isLeaf isLeafFunc, treeWalkIgnoredErrs []error, disks ...Sto
 }
 
 // listObjects - wrapper function implemented over file tree walk.
-func (xl xlObjects) listObjects(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
+func (xl *xlObjects) listObjects(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
 	// Default is recursive, if delimiter is set then list non recursive.
 	recursive := true
 	if delimiter == slashSeparator {
@@ -122,7 +122,7 @@ func (xl xlObjects) listObjects(bucket, prefix, marker, delimiter string, maxKey
 }
 
 // ListObjects - list all objects at prefix, delimited by '/'.
-func (xl xlObjects) ListObjects(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
+func (xl *xlObjects) ListObjects(bucket, prefix, marker, delimiter string, maxKeys int) (ListObjectsInfo, error) {
 	if err := checkListObjsArgs(bucket, prefix, marker, delimiter, xl); err != nil {
 		return ListObjectsInfo{}, err
 	}

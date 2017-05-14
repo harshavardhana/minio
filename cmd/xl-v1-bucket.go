@@ -29,8 +29,9 @@ var bucketMetadataOpIgnoredErrs = append(bucketOpIgnoredErrs, errVolumeNotFound)
 
 /// Bucket operations
 
-// MakeBucket - make a bucket.
-func (xl xlObjects) MakeBucketWithLocation(bucket, location string) error {
+// MakeBucketWithLocation - make a bucket on the XL backend, location value
+// is not useful for the XL backend and ignored.
+func (xl *xlObjects) MakeBucketWithLocation(bucket, location string) error {
 	// Verify if bucket is valid.
 	if !IsValidBucketName(bucket) {
 		return traceError(BucketNameInvalid{Bucket: bucket})
@@ -70,7 +71,7 @@ func (xl xlObjects) MakeBucketWithLocation(bucket, location string) error {
 	return toObjectErr(err, bucket)
 }
 
-func (xl xlObjects) undoDeleteBucket(bucket string) {
+func (xl *xlObjects) undoDeleteBucket(bucket string) {
 	// Initialize sync waitgroup.
 	var wg = &sync.WaitGroup{}
 	// Undo previous make bucket entry on all underlying storage disks.
@@ -112,7 +113,7 @@ func undoMakeBucket(storageDisks []StorageAPI, bucket string) {
 }
 
 // getBucketInfo - returns the BucketInfo from one of the load balanced disks.
-func (xl xlObjects) getBucketInfo(bucketName string) (bucketInfo BucketInfo, err error) {
+func (xl *xlObjects) getBucketInfo(bucketName string) (bucketInfo BucketInfo, err error) {
 	var bucketErrs []error
 	for _, disk := range xl.getLoadBalancedDisks() {
 		if disk == nil {
@@ -144,7 +145,7 @@ func (xl xlObjects) getBucketInfo(bucketName string) (bucketInfo BucketInfo, err
 }
 
 // GetBucketInfo - returns BucketInfo for a bucket.
-func (xl xlObjects) GetBucketInfo(bucket string) (BucketInfo, error) {
+func (xl *xlObjects) GetBucketInfo(bucket string) (BucketInfo, error) {
 	// Verify if bucket is valid.
 	if !IsValidBucketName(bucket) {
 		return BucketInfo{}, BucketNameInvalid{Bucket: bucket}
@@ -158,7 +159,7 @@ func (xl xlObjects) GetBucketInfo(bucket string) (BucketInfo, error) {
 }
 
 // listBuckets - returns list of all buckets from a disk picked at random.
-func (xl xlObjects) listBuckets() (bucketsInfo []BucketInfo, err error) {
+func (xl *xlObjects) listBuckets() (bucketsInfo []BucketInfo, err error) {
 	for _, disk := range xl.getLoadBalancedDisks() {
 		if disk == nil {
 			continue
@@ -198,7 +199,7 @@ func (xl xlObjects) listBuckets() (bucketsInfo []BucketInfo, err error) {
 }
 
 // ListBuckets - lists all the buckets, sorted by its name.
-func (xl xlObjects) ListBuckets() ([]BucketInfo, error) {
+func (xl *xlObjects) ListBuckets() ([]BucketInfo, error) {
 	bucketInfos, err := xl.listBuckets()
 	if err != nil {
 		return nil, toObjectErr(err)
@@ -209,7 +210,7 @@ func (xl xlObjects) ListBuckets() ([]BucketInfo, error) {
 }
 
 // DeleteBucket - deletes a bucket.
-func (xl xlObjects) DeleteBucket(bucket string) error {
+func (xl *xlObjects) DeleteBucket(bucket string) error {
 	// Verify if bucket is valid.
 	if !IsValidBucketName(bucket) {
 		return BucketNameInvalid{Bucket: bucket}

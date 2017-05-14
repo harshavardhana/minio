@@ -169,7 +169,7 @@ func newXLObjects(storageDisks []StorageAPI) (ObjectLayer, error) {
 }
 
 // Shutdown function for object storage interface.
-func (xl xlObjects) Shutdown() error {
+func (xl *xlObjects) Shutdown() error {
 	// Add any object layer shutdown activities here.
 	for _, disk := range xl.storageDisks {
 		// This closes storage rpc client connections if any.
@@ -259,7 +259,7 @@ func getStorageInfo(disks []StorageAPI) StorageInfo {
 }
 
 // StorageInfo - returns underlying storage statistics.
-func (xl xlObjects) StorageInfo() StorageInfo {
+func (xl *xlObjects) StorageInfo() StorageInfo {
 	storageInfo := getStorageInfo(xl.storageDisks)
 	storageInfo.Backend.ReadQuorum = xl.readQuorum
 	storageInfo.Backend.WriteQuorum = xl.writeQuorum
