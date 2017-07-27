@@ -40,3 +40,11 @@ func (l *gcsGateway) ListObjectsHeal(bucket string, prefix string, marker string
 func (l *gcsGateway) ListUploadsHeal(bucket string, prefix string, marker string, uploadIDMarker string, delimiter string, maxUploads int) (ListMultipartsInfo, error) {
 	return ListMultipartsInfo{}, traceError(NotImplemented{})
 }
+
+func (l *gcsGateway) GetBucketACL(string) (AccessControlPolicy, error) {
+	return AccessControlPolicy{}, traceError(NotImplemented{})
+}
+
+func (l *gcsGateway) SetBucketACL(string, AccessControlPolicy) error {
+	return traceError(NotImplemented{})
+}

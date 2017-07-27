@@ -20,6 +20,7 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/xml"
 	"fmt"
 	"hash"
 	"io"
@@ -755,4 +756,93 @@ func (a *azureObjects) DeleteBucketPolicies(bucket string) error {
 	}
 	err := a.client.SetContainerPermissions(bucket, perm, 0, "")
 	return azureToObjectError(traceError(err))
+}
+
+type Permission string
+
+const (
+	ReadPerm        = Permission("READ")
+	WritePerm       = Permission("WRITE")
+	ReadACPPerm     = Permission("READ_ACP")
+	WriteACPPerm    = Permission("WRITE_ACP")
+	FullControlPerm = Permission("FULL_CONTROL")
+)
+
+type Grantee struct {
+	XmlNS       string `xml:"xmlns:xsi,attr"`
+	XmlXSI      string `xml:"xsi:type,attr"`
+	ID          string `xml:"ID,omitempty"`
+	DisplayName string `xml:"DisplayName,omitempty"`
+	URI         string `xml:"URI,omitempty"`
+}
+
+type Grant struct {
+	Grantee    Grantee    `xml:"Grantee"`
+	Permission Permission `xml:"Permission"`
+}
+
+type AccessControlList struct {
+	Grants []Grant `xml:"Grant"`
+}
+
+type AccessControlPolicy struct {
+	XMLName           xml.Name          `xml:"AccessControlPolicy"`
+	Owner             Owner             `xml:"Owner"`
+	AccessControlList AccessControlList `xml:"AccessControlList"`
+}
+
+func (a *azureObjects) GetBucketACL(bucket string) (AccessControlPolicy, error) {
+	perm, err := a.client.GetContainerPermissions(bucket, 0, "")
+	if err != nil {
+		return AccessControlPolicy{}, azureToObjectError(traceError(err), bucket)
+	}
+
+	acl := AccessControlPolicy{}
+	creds := serverConfig.GetCredential()
+	acl.Owner.ID = creds.AccessKey
+
+	switch perm.AccessType {
+	case storage.ContainerAccessTypePrivate:
+		return acl, nil
+	case storage.ContainerAccessTypeContainer:
+		acl.AccessControlList = AccessControlList{
+			Grants: []Grant{
+				Grant{
+					Grantee: Grantee{
+						XmlNS:  "http://www.w3.org/2001/XMLSchema-instance",
+						XmlXSI: "Group",
+						URI:    "http://acs.amazonaws.com/groups/global/AllUsers",
+					},
+					Permission: ReadPerm,
+				},
+			},
+		}
+		return acl, nil
+	default:
+		return AccessControlPolicy{}, azureToObjectError(traceError(NotImplemented{}))
+	}
+}
+
+func (a *azureObjects) SetBucketACL(bucket string, acl AccessControlPolicy) error {
+	var accessType storage.ContainerAccessType
+	switch len(acl.AccessControlList.Grants) {
+	case 0:
+		accessType = storage.ContainerAccessTypePrivate
+	case 1:
+		grant := acl.AccessControlList.Grants[0]
+		if grant.Grantee.URI != "http://acs.amazonaws.com/groups/global/AllUsers" ||
+			grant.Permission != ReadPerm {
+			return traceError(NotImplemented{})
+		}
+		accessType = storage.ContainerAccessTypeContainer
+	default:
+		return traceError(NotImplemented{})
+	}
+
+	perm := storage.ContainerPermissions{
+		AccessType:     accessType,
+		AccessPolicies: nil,
+	}
+	err := a.client.SetContainerPermissions(bucket, perm, 0, "")
+	return azureToObjectError(traceError(err), bucket)
 }

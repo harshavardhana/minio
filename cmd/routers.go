@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"net/http"
+	"os"
 
 	router "github.com/gorilla/mux"
 )
@@ -111,6 +112,11 @@ func configureServerHandler(endpoints EndpointList) (http.Handler, error) {
 		// invalid/unsupported signatures.
 		setAuthHandler,
 		// Add new handlers here.
+	}
+
+	if os.Getenv("_MINIO_REQUEST_LOGGING") != "" {
+		// Add logging handler.
+		handlerFns = append(handlerFns, setLoggingHandler)
 	}
 
 	// Register rest of the handlers.

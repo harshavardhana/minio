@@ -35,6 +35,10 @@ type GatewayLayer interface {
 	SetBucketPolicies(string, policy.BucketAccessPolicy) error
 	GetBucketPolicies(string) (policy.BucketAccessPolicy, error)
 	DeleteBucketPolicies(string) error
+
+	SetBucketACL(string, AccessControlPolicy) error
+	GetBucketACL(string) (AccessControlPolicy, error)
+
 	AnonListObjects(bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error)
 	AnonListObjectsV2(bucket, prefix, continuationToken string, fetchOwner bool, delimiter string, maxKeys int) (result ListObjectsV2Info, err error)
 	ListObjectsV2(bucket, prefix, continuationToken string, fetchOwner bool, delimiter string, maxKeys int) (result ListObjectsV2Info, err error)
@@ -95,6 +99,8 @@ func registerGatewayAPIRouter(mux *router.Router, gw GatewayLayer) {
 	bucket.Methods("GET").HandlerFunc(api.GetBucketLocationHandler).Queries("location", "")
 	// GetBucketPolicy
 	bucket.Methods("GET").HandlerFunc(api.GetBucketPolicyHandler).Queries("policy", "")
+	// GetBucketACL
+	bucket.Methods("GET").HandlerFunc(api.GetBucketACLHandler).Queries("acl", "")
 	// GetBucketNotification
 	bucket.Methods("GET").HandlerFunc(api.GetBucketNotificationHandler).Queries("notification", "")
 	// ListenBucketNotification
@@ -107,6 +113,8 @@ func registerGatewayAPIRouter(mux *router.Router, gw GatewayLayer) {
 	bucket.Methods("GET").HandlerFunc(api.ListObjectsV1Handler)
 	// PutBucketPolicy
 	bucket.Methods("PUT").HandlerFunc(api.PutBucketPolicyHandler).Queries("policy", "")
+	// PutBucketACL
+	bucket.Methods("PUT").HandlerFunc(api.PutBucketACLHandler).Queries("acl", "")
 	// PutBucketNotification
 	bucket.Methods("PUT").HandlerFunc(api.PutBucketNotificationHandler).Queries("notification", "")
 	// PutBucket

@@ -33,6 +33,9 @@ import (
 // maximum supported access policy size.
 const maxAccessPolicySize = 20 * humanize.KiByte
 
+// maximum supported ACL size
+const maxACLSize = humanize.MiByte
+
 // Verify if a given action is valid for the url path based on the
 // existing bucket access policy.
 func bucketPolicyEvalStatements(action string, resource string, conditions map[string]set.StringSet, statements []policyStatement) bool {

@@ -40,3 +40,11 @@ func (l *s3Objects) ListObjectsHeal(bucket string, prefix string, marker string,
 func (l *s3Objects) ListUploadsHeal(bucket string, prefix string, marker string, uploadIDMarker string, delimiter string, maxUploads int) (lmi ListMultipartsInfo, e error) {
 	return lmi, traceError(NotImplemented{})
 }
+
+func (l *s3Objects) GetBucketACL(string) (AccessControlPolicy, error) {
+	return AccessControlPolicy{}, traceError(NotImplemented{})
+}
+
+func (l *s3Objects) SetBucketACL(string, AccessControlPolicy) error {
+	return traceError(NotImplemented{})
+}

@@ -25,6 +25,7 @@ import (
 
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 
 	router "github.com/gorilla/mux"
 	"github.com/minio/minio-go/pkg/policy"
@@ -558,6 +559,111 @@ func (api gatewayAPIHandlers) GetBucketPolicyHandler(w http.ResponseWriter, r *h
 	}
 	// Write to client.
 	w.Write(policyBytes)
+}
+
+// GetBucketACLHandler - GET Bucket ACL
+// -----------------
+// This operation uses the ACL
+// subresource to return the ACL of a specified bucket.
+func (api gatewayAPIHandlers) GetBucketACLHandler(w http.ResponseWriter, r *http.Request) {
+	objAPI := api.ObjectAPI()
+	if objAPI == nil {
+		writeErrorResponse(w, ErrServerNotInitialized, r.URL)
+		return
+	}
+
+	if s3Error := checkRequestAuthType(r, "", "", serverConfig.GetRegion()); s3Error != ErrNone {
+		writeErrorResponse(w, s3Error, r.URL)
+		return
+	}
+
+	vars := router.Vars(r)
+	bucket := vars["bucket"]
+
+	// Before proceeding validate if bucket exists.
+	_, err := objAPI.GetBucketInfo(bucket)
+	if err != nil {
+		errorIf(err, "Unable to find bucket info.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	acl, err := objAPI.GetBucketACL(bucket)
+	if err != nil {
+		errorIf(err, "Unable to read bucket acl.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	aclResp, err := xml.Marshal(acl)
+	if err != nil {
+		errorIf(err, "Unable to read bucket acl.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	w.Write(aclResp)
+}
+
+// PutBucketACLHandler - PUT Bucket ACL
+// -----------------
+// This implementation of the PUT operation uses the ACL
+// subresource to add to or replace an ACL on a bucket
+func (api gatewayAPIHandlers) PutBucketACLHandler(w http.ResponseWriter, r *http.Request) {
+	objAPI := api.ObjectAPI()
+	if objAPI == nil {
+		writeErrorResponse(w, ErrServerNotInitialized, r.URL)
+		return
+	}
+
+	if s3Error := checkRequestAuthType(r, "", "", serverConfig.GetRegion()); s3Error != ErrNone {
+		writeErrorResponse(w, s3Error, r.URL)
+		return
+	}
+
+	vars := router.Vars(r)
+	bucket := vars["bucket"]
+
+	// Before proceeding validate if bucket exists.
+	_, err := objAPI.GetBucketInfo(bucket)
+	if err != nil {
+		errorIf(err, "Unable to find bucket info.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	// If Content-Length is unknown or zero, deny the
+	// request. PutBucketPolicy always needs a Content-Length.
+	if r.ContentLength == -1 || r.ContentLength == 0 {
+		writeErrorResponse(w, ErrMissingContentLength, r.URL)
+		return
+	}
+	// If Content-Length is greater than maximum allowed policy size.
+	if r.ContentLength > maxACLSize {
+		writeErrorResponse(w, ErrEntityTooLarge, r.URL)
+		return
+	}
+
+	aclBytes, err := ioutil.ReadAll(io.LimitReader(r.Body, maxACLSize))
+	if err != nil {
+		errorIf(err, "Unable to read from client.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	aclInfo := AccessControlPolicy{}
+	if err = xml.Unmarshal(aclBytes, &aclInfo); err != nil {
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	if err = objAPI.SetBucketACL(bucket, aclInfo); err != nil {
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	// Success.
+	writeSuccessNoContent(w)
 }
 
 // GetBucketNotificationHandler - This implementation of the GET
