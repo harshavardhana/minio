@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -688,48 +687,6 @@ type GetBucketPolicyRep struct {
 	Policy    policy.BucketPolicy `json:"policy"`
 }
 
-func readBucketAccessPolicy(objAPI ObjectLayer, bucketName string) (policy.BucketAccessPolicy, error) {
-	bucketPolicyReader, err := readBucketPolicyJSON(bucketName, objAPI)
-	if err != nil {
-		if _, ok := err.(BucketPolicyNotFound); ok {
-			return policy.BucketAccessPolicy{Version: "2012-10-17"}, nil
-		}
-		return policy.BucketAccessPolicy{}, err
-	}
-
-	bucketPolicyBuf, err := ioutil.ReadAll(bucketPolicyReader)
-	if err != nil {
-		return policy.BucketAccessPolicy{}, err
-	}
-
-	policyInfo := policy.BucketAccessPolicy{}
-	err = json.Unmarshal(bucketPolicyBuf, &policyInfo)
-	if err != nil {
-		return policy.BucketAccessPolicy{}, err
-	}
-
-	return policyInfo, nil
-
-}
-
-func getBucketAccessPolicy(objAPI ObjectLayer, bucketName string) (policy.BucketAccessPolicy, error) {
-	// FIXME: remove this code when S3 layer for gateway and server is unified.
-	var policyInfo policy.BucketAccessPolicy
-	var err error
-
-	switch layer := objAPI.(type) {
-	case *s3Objects:
-		policyInfo, err = layer.GetBucketPolicies(bucketName)
-	case *azureObjects:
-		policyInfo, err = layer.GetBucketPolicies(bucketName)
-	case *gcsGateway:
-		policyInfo, err = layer.GetBucketPolicies(bucketName)
-	default:
-		policyInfo, err = readBucketAccessPolicy(objAPI, bucketName)
-	}
-	return policyInfo, err
-}
-
 // GetBucketPolicy - get bucket policy for the requested prefix.
 func (web *webAPIHandlers) GetBucketPolicy(r *http.Request, args *GetBucketPolicyArgs, reply *GetBucketPolicyRep) error {
 	objectAPI := web.ObjectAPI()
@@ -741,7 +698,7 @@ func (web *webAPIHandlers) GetBucketPolicy(r *http.Request, args *GetBucketPolic
 		return toJSONError(errAuthentication)
 	}
 
-	var policyInfo, err = getBucketAccessPolicy(objectAPI, args.BucketName)
+	policyInfo, err := getBucketAccessPolicy(args.BucketName, objectAPI)
 	if err != nil {
 		_, ok := errorCause(err).(PolicyNotFound)
 		if !ok {
@@ -783,12 +740,9 @@ func (web *webAPIHandlers) ListAllBucketPolicies(r *http.Request, args *ListAllB
 		return toJSONError(errAuthentication)
 	}
 
-	var policyInfo, err = getBucketAccessPolicy(objectAPI, args.BucketName)
+	policyInfo, err := getBucketAccessPolicy(args.BucketName, objectAPI)
 	if err != nil {
-		_, ok := errorCause(err).(PolicyNotFound)
-		if !ok {
-			return toJSONError(err, args.BucketName)
-		}
+		return toJSONError(err, args.BucketName)
 	}
 	reply.UIVersion = browser.UIVersion
 	for prefix, policy := range policy.GetPolicies(policyInfo.Statements, args.BucketName) {
@@ -827,34 +781,29 @@ func (web *webAPIHandlers) SetBucketPolicy(r *http.Request, args *SetBucketPolic
 		}
 	}
 
-	var policyInfo, err = getBucketAccessPolicy(objectAPI, args.BucketName)
+	policyInfo, err := getBucketAccessPolicy(args.BucketName, objectAPI)
 	if err != nil {
-		if _, ok := errorCause(err).(PolicyNotFound); !ok {
-			return toJSONError(err, args.BucketName)
-		}
-		policyInfo = policy.BucketAccessPolicy{Version: "2012-10-17"}
+		return toJSONError(err, args.BucketName)
 	}
 
 	policyInfo.Statements = policy.SetPolicy(policyInfo.Statements, bucketP, args.BucketName, args.Prefix)
-	switch g := objectAPI.(type) {
+	switch gw := objectAPI.(type) {
 	case GatewayLayer:
 		if len(policyInfo.Statements) == 0 {
-			err = g.DeleteBucketPolicies(args.BucketName)
-			if err != nil {
+			if err = gw.DeleteBucketPolicies(args.BucketName); err != nil {
 				return toJSONError(err, args.BucketName)
 			}
 			return nil
 		}
-		err = g.SetBucketPolicies(args.BucketName, policyInfo)
-		if err != nil {
+		if err = gw.SetBucketPolicies(args.BucketName, policyInfo); err != nil {
 			return toJSONError(err)
 		}
 		return nil
 	}
 
 	if len(policyInfo.Statements) == 0 {
-		err = persistAndNotifyBucketPolicyChange(args.BucketName, policyChange{true, nil}, objectAPI)
-		if err != nil {
+		if err = persistAndNotifyBucketPolicyChange(args.BucketName, policyChange{true, policyInfo},
+			objectAPI); err != nil {
 			return toJSONError(err, args.BucketName)
 		}
 		return nil
