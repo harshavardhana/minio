@@ -625,39 +625,73 @@ func (api gatewayAPIHandlers) PutBucketACLHandler(w http.ResponseWriter, r *http
 	bucket := vars["bucket"]
 
 	// Before proceeding validate if bucket exists.
-	_, err := objAPI.GetBucketInfo(bucket)
-	if err != nil {
+	if _, err := objAPI.GetBucketInfo(bucket); err != nil {
 		errorIf(err, "Unable to find bucket info.")
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
 
+	cannedACL := r.Header.Get("x-amz-acl")
+	grantRead := r.Header.Get("x-amz-grant-read")
+
 	// If Content-Length is unknown or zero, deny the
 	// request. PutBucketPolicy always needs a Content-Length.
-	if r.ContentLength == -1 || r.ContentLength == 0 {
-		writeErrorResponse(w, ErrMissingContentLength, r.URL)
-		return
+	if cannedACL == "" && grantRead == "" {
+		if r.ContentLength == -1 {
+			writeErrorResponse(w, ErrMissingContentLength, r.URL)
+			return
+		}
 	}
+
 	// If Content-Length is greater than maximum allowed policy size.
 	if r.ContentLength > maxACLSize {
 		writeErrorResponse(w, ErrEntityTooLarge, r.URL)
 		return
 	}
 
-	aclBytes, err := ioutil.ReadAll(io.LimitReader(r.Body, maxACLSize))
-	if err != nil {
-		errorIf(err, "Unable to read from client.")
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
 	aclInfo := AccessControlPolicy{}
-	if err = xml.Unmarshal(aclBytes, &aclInfo); err != nil {
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
+	if cannedACL == "public-read" {
+		aclInfo = AccessControlPolicy{
+			AccessControlList: AccessControlList{
+				Grants: []Grant{
+					Grant{
+						Grantee: Grantee{
+							XmlNS:  "http://www.w3.org/2001/XMLSchema-instance",
+							XmlXSI: "Group",
+							URI:    "http://acs.amazonaws.com/groups/global/AllUsers",
+						},
+						Permission: ReadPerm,
+					},
+				},
+			}}
+	} else if grantRead == "http://acs.amazonaws.com/groups/global/AllUsers" {
+		aclInfo = AccessControlPolicy{
+			AccessControlList: AccessControlList{
+				Grants: []Grant{
+					Grant{
+						Grantee: Grantee{
+							XmlNS:  "http://www.w3.org/2001/XMLSchema-instance",
+							XmlXSI: "Group",
+							URI:    "http://acs.amazonaws.com/groups/global/AllUsers",
+						},
+						Permission: ReadPerm,
+					},
+				},
+			}}
+	} else {
+		aclBytes, err := ioutil.ReadAll(io.LimitReader(r.Body, maxACLSize))
+		if err != nil {
+			errorIf(err, "Unable to read from client.")
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
+		if err = xml.Unmarshal(aclBytes, &aclInfo); err != nil {
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
 	}
 
-	if err = objAPI.SetBucketACL(bucket, aclInfo); err != nil {
+	if err := objAPI.SetBucketACL(bucket, aclInfo); err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
@@ -732,6 +766,45 @@ func (api gatewayAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Re
 	err := objectAPI.MakeBucketWithLocation(bucket, location)
 	if err != nil {
 		errorIf(err, "Unable to create a bucket.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	cannedACL := r.Header.Get("x-amz-acl")
+	grantRead := r.Header.Get("x-amz-grant-read")
+
+	aclInfo := AccessControlPolicy{}
+	if cannedACL == "public-read" {
+		aclInfo = AccessControlPolicy{
+			AccessControlList: AccessControlList{
+				Grants: []Grant{
+					Grant{
+						Grantee: Grantee{
+							XmlNS:  "http://www.w3.org/2001/XMLSchema-instance",
+							XmlXSI: "Group",
+							URI:    "http://acs.amazonaws.com/groups/global/AllUsers",
+						},
+						Permission: ReadPerm,
+					},
+				},
+			}}
+	} else if grantRead == "http://acs.amazonaws.com/groups/global/AllUsers" {
+		aclInfo = AccessControlPolicy{
+			AccessControlList: AccessControlList{
+				Grants: []Grant{
+					Grant{
+						Grantee: Grantee{
+							XmlNS:  "http://www.w3.org/2001/XMLSchema-instance",
+							XmlXSI: "Group",
+							URI:    "http://acs.amazonaws.com/groups/global/AllUsers",
+						},
+						Permission: ReadPerm,
+					},
+				},
+			}}
+	}
+
+	if err := objectAPI.SetBucketACL(bucket, aclInfo); err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
