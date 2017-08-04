@@ -21,58 +21,61 @@ import (
 	"errors"
 )
 
-// Represents the criteria for the filter rule.
-type filterRule struct {
+// FilterRule - Represents the criteria for the filter rule.
+type FilterRule struct {
 	Name  string `xml:"Name"`
 	Value string `xml:"Value"`
 }
 
-// Collection of filter rules per service config.
-type keyFilter struct {
-	FilterRules []filterRule `xml:"FilterRule,omitempty"`
+// KeyFilter - Collection of filter rules per service config.
+type KeyFilter struct {
+	FilterRules []FilterRule `xml:"FilterRule,omitempty"`
 }
 
-type filterStruct struct {
-	Key keyFilter `xml:"S3Key,omitempty" json:"S3Key,omitempty"`
+// FilterStruct - encapsulates key filter rules.
+type FilterStruct struct {
+	Key KeyFilter `xml:"S3Key,omitempty" json:"S3Key,omitempty"`
 }
 
 // ServiceConfig - Common elements of service notification.
 type ServiceConfig struct {
 	Events []string     `xml:"Event" json:"Event"`
-	Filter filterStruct `xml:"Filter" json:"Filter"`
+	Filter FilterStruct `xml:"Filter" json:"Filter"`
 	ID     string       `xml:"Id" json:"Id"`
 }
 
-// Queue SQS configuration.
-type queueConfig struct {
+// QueueConfig - Queue SQS configuration, this struct represents all the
+// notification targets supported by minio requested by the client to
+// enable.
+type QueueConfig struct {
 	ServiceConfig
 	QueueARN string `xml:"Queue"`
 }
 
-// Topic SNS configuration, this is a compliance field not used by minio yet.
-type topicConfig struct {
+// TopicConfig - Topic SNS configuration, this is a compliance field not used by minio yet.
+type TopicConfig struct {
 	ServiceConfig
 	TopicARN string `xml:"Topic" json:"Topic"`
 }
 
-// Lambda function configuration, this is a compliance field not used by minio yet.
-type lambdaConfig struct {
+// LambdaConfig - Lambda function configuration, this is a compliance field not used by minio yet.
+type LambdaConfig struct {
 	ServiceConfig
 	LambdaARN string `xml:"CloudFunction"`
 }
 
-// Notification configuration structure represents the XML format of
-// notification configuration of buckets.
-type notificationConfig struct {
+// NotificationConfig - Notification configuration structure represents the
+// XML format of notification configuration of buckets.
+type NotificationConfig struct {
 	XMLName       xml.Name       `xml:"NotificationConfiguration"`
-	QueueConfigs  []queueConfig  `xml:"QueueConfiguration"`
-	LambdaConfigs []lambdaConfig `xml:"CloudFunctionConfiguration"`
+	QueueConfigs  []QueueConfig  `xml:"QueueConfiguration"`
+	LambdaConfigs []LambdaConfig `xml:"CloudFunctionConfiguration"`
 }
 
-// listenerConfig structure represents run-time notification
+// ListenerConfig - structure represents run-time notification
 // configuration for live listeners
-type listenerConfig struct {
-	TopicConfig  topicConfig `json:"TopicConfiguration"`
+type ListenerConfig struct {
+	TopicConfig  TopicConfig `json:"TopicConfiguration"`
 	TargetServer string      `json:"TargetServer"`
 }
 

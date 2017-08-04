@@ -17,11 +17,11 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"path"
 	"sync"
 
+	"github.com/minio/minio-go/pkg/policy"
 	"github.com/minio/minio-go/pkg/set"
 )
 
@@ -30,6 +30,7 @@ import (
 type s3Peer struct {
 	// address in `host:port` format
 	addr string
+
 	// BucketMetaState client interface
 	bmsClient BucketMetaState
 }
@@ -56,14 +57,16 @@ func makeS3Peers(endpoints EndpointList) (s3PeerList s3Peers) {
 		hostSet.Add(host)
 		s3PeerList = append(s3PeerList, s3Peer{
 			addr: host,
-			bmsClient: &remoteBucketMetaState{newAuthRPCClient(authConfig{
-				accessKey:       cred.AccessKey,
-				secretKey:       cred.SecretKey,
-				serverAddr:      host,
-				serviceEndpoint: serviceEndpoint,
-				secureConn:      globalIsSSL,
-				serviceName:     "S3",
-			})},
+			bmsClient: &remoteBucketMetaState{
+				newAuthRPCClient(authConfig{
+					accessKey:       cred.AccessKey,
+					secretKey:       cred.SecretKey,
+					serverAddr:      host,
+					serviceEndpoint: serviceEndpoint,
+					secureConn:      globalIsSSL,
+					serviceName:     "S3",
+				}),
+			},
 		})
 	}
 
@@ -141,7 +144,7 @@ func (s3p s3Peers) SendUpdate(peerIndex []int, args BucketUpdater) []error {
 
 // S3PeersUpdateBucketNotification - Sends Update Bucket notification
 // request to all peers. Currently we log an error and continue.
-func S3PeersUpdateBucketNotification(bucket string, ncfg *notificationConfig) {
+func S3PeersUpdateBucketNotification(bucket string, ncfg *NotificationConfig) {
 	setBNPArgs := &SetBucketNotificationPeerArgs{Bucket: bucket, NCfg: ncfg}
 	errs := globalS3Peers.SendUpdate(nil, setBNPArgs)
 	for idx, err := range errs {
@@ -155,7 +158,7 @@ func S3PeersUpdateBucketNotification(bucket string, ncfg *notificationConfig) {
 
 // S3PeersUpdateBucketListener - Sends Update Bucket listeners request
 // to all peers. Currently we log an error and continue.
-func S3PeersUpdateBucketListener(bucket string, lcfg []listenerConfig) {
+func S3PeersUpdateBucketListener(bucket string, lcfg []ListenerConfig) {
 	setBLPArgs := &SetBucketListenerPeerArgs{Bucket: bucket, LCfg: lcfg}
 	errs := globalS3Peers.SendUpdate(nil, setBLPArgs)
 	for idx, err := range errs {
@@ -169,14 +172,11 @@ func S3PeersUpdateBucketListener(bucket string, lcfg []listenerConfig) {
 
 // S3PeersUpdateBucketPolicy - Sends update bucket policy request to
 // all peers. Currently we log an error and continue.
-func S3PeersUpdateBucketPolicy(bucket string, pCh policyChange) {
-	byts, err := json.Marshal(pCh)
-	if err != nil {
-		errorIf(err, "Failed to marshal policyChange - this is a BUG!")
-		return
-	}
-	setBPPArgs := &SetBucketPolicyPeerArgs{Bucket: bucket, PChBytes: byts}
-	errs := globalS3Peers.SendUpdate(nil, setBPPArgs)
+func S3PeersUpdateBucketPolicy(bucket string, p policy.BucketAccessPolicy) {
+	errs := globalS3Peers.SendUpdate(nil, &SetBucketPolicyPeerArgs{
+		Bucket: bucket,
+		Policy: p,
+	})
 	for idx, err := range errs {
 		errorIf(
 			err,

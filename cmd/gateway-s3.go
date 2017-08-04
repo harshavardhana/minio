@@ -583,3 +583,27 @@ func (l *s3Objects) DeleteBucketPolicies(bucket string) error {
 	}
 	return nil
 }
+
+func (l *s3Objects) SetBucketNotification(bucket string, ncfg *NotificationConfig) error {
+	return NotImplemented{}
+}
+
+func (l *s3Objects) GetBucketNotification(bucket string) (*NotificationConfig, error) {
+	return nil, NotImplemented{}
+}
+
+func (l *s3Objects) DeleteBucketNotification(bucket string) error {
+	return NotImplemented{}
+}
+
+func (l *s3Objects) SetBucketListener(bucket string, lcfg []ListenerConfig) error {
+	return NotImplemented{}
+}
+
+func (l *s3Objects) GetBucketListener(bucket string) ([]ListenerConfig, error) {
+	return nil, NotImplemented{}
+}
+
+func (l *s3Objects) DeleteBucketListener(bucket string) error {
+	return NotImplemented{}
+}

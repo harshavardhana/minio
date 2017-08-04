@@ -436,7 +436,7 @@ func testListObjectsWebHandler(obj ObjectLayer, instanceType string, t TestErrHa
 		Statements: []policy.Statement{getReadOnlyObjectStatement(bucketName, "")},
 	}
 
-	globalBucketPolicies.SetBucketPolicy(bucketName, policyChange{false, policy})
+	globalBucketPolicies.SetBucketPolicy(bucketName, policy)
 
 	// Unauthenticated ListObjects with READ bucket policy should succeed.
 	err, reply = test("")
@@ -786,7 +786,7 @@ func testUploadWebHandler(obj ObjectLayer, instanceType string, t TestErrHandler
 		Statements: []policy.Statement{getWriteOnlyObjectStatement(bucketName, "")},
 	}
 
-	globalBucketPolicies.SetBucketPolicy(bucketName, policyChange{false, policy})
+	globalBucketPolicies.SetBucketPolicy(bucketName, policy)
 
 	// Unauthenticated upload with WRITE policy should succeed.
 	code = test("", true)
@@ -892,7 +892,7 @@ func testDownloadWebHandler(obj ObjectLayer, instanceType string, t TestErrHandl
 		Statements: []policy.Statement{getReadOnlyObjectStatement(bucketName, "")},
 	}
 
-	globalBucketPolicies.SetBucketPolicy(bucketName, policyChange{false, policy})
+	globalBucketPolicies.SetBucketPolicy(bucketName, policy)
 
 	// Unauthenticated download with READ policy should succeed.
 	code, bodyContent = test("")
@@ -1136,7 +1136,7 @@ func testWebGetBucketPolicyHandler(obj ObjectLayer, instanceType string, t TestE
 			},
 		},
 	}
-	if err := writeBucketPolicy(bucketName, obj, policyVal); err != nil {
+	if err := setBucketPolicies(bucketName, policyVal, obj); err != nil {
 		t.Fatal("Unexpected error: ", err)
 	}
 
@@ -1233,17 +1233,17 @@ func testWebListAllBucketPoliciesHandler(obj ObjectLayer, instanceType string, t
 			},
 		},
 	}
-	if err := writeBucketPolicy(bucketName, obj, policyVal); err != nil {
+	if err := setBucketPolicies(bucketName, policyVal, obj); err != nil {
 		t.Fatal("Unexpected error: ", err)
 	}
 
-	testCaseResult1 := []BucketAccessPolicy{{
+	testCaseResult1 := []CannedBucketAccessPolicy{{
 		Prefix: bucketName + "/hello*",
 		Policy: policy.BucketPolicyReadWrite,
 	}}
 	testCases := []struct {
 		bucketName     string
-		expectedResult []BucketAccessPolicy
+		expectedResult []CannedBucketAccessPolicy
 	}{
 		{bucketName, testCaseResult1},
 	}

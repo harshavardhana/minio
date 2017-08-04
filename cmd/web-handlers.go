@@ -698,10 +698,9 @@ func (web *webAPIHandlers) GetBucketPolicy(r *http.Request, args *GetBucketPolic
 		return toJSONError(errAuthentication)
 	}
 
-	policyInfo, err := getBucketAccessPolicy(args.BucketName, objectAPI)
+	policyInfo, err := objectAPI.GetBucketPolicies(args.BucketName)
 	if err != nil {
-		_, ok := errorCause(err).(PolicyNotFound)
-		if !ok {
+		if _, ok := errorCause(err).(BucketPolicyNotFound); !ok {
 			return toJSONError(err, args.BucketName)
 		}
 	}
@@ -717,16 +716,16 @@ type ListAllBucketPoliciesArgs struct {
 	BucketName string `json:"bucketName"`
 }
 
-// BucketAccessPolicy - Collection of canned bucket policy at a given prefix.
-type BucketAccessPolicy struct {
+// CannedBucketAccessPolicy - Collection of canned bucket policy at a given prefix.
+type CannedBucketAccessPolicy struct {
 	Prefix string              `json:"prefix"`
 	Policy policy.BucketPolicy `json:"policy"`
 }
 
 // ListAllBucketPoliciesRep - get all bucket policy reply.
 type ListAllBucketPoliciesRep struct {
-	UIVersion string               `json:"uiVersion"`
-	Policies  []BucketAccessPolicy `json:"policies"`
+	UIVersion string                     `json:"uiVersion"`
+	Policies  []CannedBucketAccessPolicy `json:"policies"`
 }
 
 // GetllBucketPolicy - get all bucket policy.
@@ -740,13 +739,13 @@ func (web *webAPIHandlers) ListAllBucketPolicies(r *http.Request, args *ListAllB
 		return toJSONError(errAuthentication)
 	}
 
-	policyInfo, err := getBucketAccessPolicy(args.BucketName, objectAPI)
+	policyInfo, err := objectAPI.GetBucketPolicies(args.BucketName)
 	if err != nil {
 		return toJSONError(err, args.BucketName)
 	}
 	reply.UIVersion = browser.UIVersion
 	for prefix, policy := range policy.GetPolicies(policyInfo.Statements, args.BucketName) {
-		reply.Policies = append(reply.Policies, BucketAccessPolicy{
+		reply.Policies = append(reply.Policies, CannedBucketAccessPolicy{
 			Prefix: prefix,
 			Policy: policy,
 		})
@@ -781,42 +780,34 @@ func (web *webAPIHandlers) SetBucketPolicy(r *http.Request, args *SetBucketPolic
 		}
 	}
 
-	policyInfo, err := getBucketAccessPolicy(args.BucketName, objectAPI)
+	// Acquire a write lock on bucket before modifying its configuration.
+	bucketLock := globalNSMutex.NewNSLock(args.BucketName, "")
+	bucketLock.Lock()
+	// Release lock after notifying peers
+	defer bucketLock.Unlock()
+
+	policyInfo, err := objectAPI.GetBucketPolicies(args.BucketName)
 	if err != nil {
-		return toJSONError(err, args.BucketName)
+		if _, ok := errorCause(err).(BucketPolicyNotFound); !ok {
+			return toJSONError(err, args.BucketName)
+		}
 	}
 
 	policyInfo.Statements = policy.SetPolicy(policyInfo.Statements, bucketP, args.BucketName, args.Prefix)
-	switch gw := objectAPI.(type) {
-	case GatewayLayer:
-		if len(policyInfo.Statements) == 0 {
-			if err = gw.DeleteBucketPolicies(args.BucketName); err != nil {
-				return toJSONError(err, args.BucketName)
-			}
-			return nil
-		}
-		if err = gw.SetBucketPolicies(args.BucketName, policyInfo); err != nil {
-			return toJSONError(err)
-		}
-		return nil
-	}
-
 	if len(policyInfo.Statements) == 0 {
-		if err = persistAndNotifyBucketPolicyChange(args.BucketName, policyChange{true, policyInfo},
-			objectAPI); err != nil {
+		if err = objectAPI.DeleteBucketPolicies(args.BucketName); err != nil {
 			return toJSONError(err, args.BucketName)
 		}
 		return nil
 	}
 	data, err := json.Marshal(policyInfo)
 	if err != nil {
-		return toJSONError(err)
+		return toJSONError(err, args.BucketName)
 	}
 
 	// Parse validate and save bucket policy.
 	if s3Error := parseAndPersistBucketPolicy(args.BucketName, data, objectAPI); s3Error != ErrNone {
 		apiErr := getAPIError(s3Error)
-		var err error
 		if apiErr.Code == "XMinioPolicyNesting" {
 			err = PolicyNesting{}
 		} else {

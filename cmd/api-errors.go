@@ -727,6 +727,8 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 		apiErr = ErrNoSuchBucketPolicy
 	case PartTooBig:
 		apiErr = ErrEntityTooLarge
+	case BucketPolicyNotFound:
+		apiErr = ErrNoSuchBucketPolicy
 	default:
 		apiErr = ErrInternalError
 	}

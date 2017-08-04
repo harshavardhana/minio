@@ -279,13 +279,13 @@ func TestSetNGetBucketNotification(t *testing.T) {
 		t.Fatal("Unexpected error:", err)
 	}
 
-	globalEventNotifier.SetBucketNotificationConfig(bucketName, &notificationConfig{})
+	globalEventNotifier.SetBucketNotificationConfig(bucketName, &NotificationConfig{})
 	nConfig := globalEventNotifier.GetBucketNotificationConfig(bucketName)
 	if nConfig == nil {
 		t.Errorf("Notification expected to be set, but notification not set.")
 	}
 
-	if !reflect.DeepEqual(nConfig, &notificationConfig{}) {
+	if !reflect.DeepEqual(nConfig, &NotificationConfig{}) {
 		t.Errorf("Mismatching notification configs.")
 	}
 }
@@ -310,7 +310,7 @@ func TestInitEventNotifier(t *testing.T) {
 	obj := s.testServer.Obj
 	bucketName := getRandomBucketName()
 	// declare sample configs
-	filterRules := []filterRule{
+	FilterRules := []FilterRule{
 		{
 			Name:  "prefix",
 			Value: "minio",
@@ -322,22 +322,22 @@ func TestInitEventNotifier(t *testing.T) {
 	}
 	sampleSvcCfg := ServiceConfig{
 		[]string{"s3:ObjectRemoved:*", "s3:ObjectCreated:*"},
-		filterStruct{
-			keyFilter{filterRules},
+		FilterStruct{
+			KeyFilter{FilterRules},
 		},
 		"1",
 	}
-	sampleNotifCfg := notificationConfig{
-		QueueConfigs: []queueConfig{
+	sampleNotifCfg := NotificationConfig{
+		QueueConfigs: []QueueConfig{
 			{
 				ServiceConfig: sampleSvcCfg,
 				QueueARN:      "testqARN",
 			},
 		},
 	}
-	sampleListenCfg := []listenerConfig{
+	sampleListenCfg := []ListenerConfig{
 		{
-			TopicConfig: topicConfig{ServiceConfig: sampleSvcCfg,
+			TopicConfig: TopicConfig{ServiceConfig: sampleSvcCfg,
 				TopicARN: "testlARN"},
 			TargetServer: globalMinioAddr,
 		},
@@ -349,11 +349,11 @@ func TestInitEventNotifier(t *testing.T) {
 	}
 
 	// bucket is created, now writing should not give errors.
-	if err := persistNotificationConfig(bucketName, &sampleNotifCfg, obj); err != nil {
+	if err := obj.SetBucketNotification(bucketName, &sampleNotifCfg); err != nil {
 		t.Fatal("Unexpected error:", err)
 	}
 
-	if err := persistListenerConfig(bucketName, sampleListenCfg, obj); err != nil {
+	if err := obj.SetBucketListener(bucketName, sampleListenCfg); err != nil {
 		t.Fatal("Unexpected error:", err)
 	}
 
@@ -419,11 +419,11 @@ func TestListenBucketNotification(t *testing.T) {
 		snsTypeMinio,
 		s.testServer.Server.Listener.Addr(),
 	)
-	lcfg := listenerConfig{
-		TopicConfig: topicConfig{
+	lcfg := ListenerConfig{
+		TopicConfig: TopicConfig{
 			ServiceConfig{
 				[]string{"s3:ObjectRemoved:*", "s3:ObjectCreated:*"},
-				filterStruct{},
+				FilterStruct{},
 				"0",
 			},
 			listenARN,
@@ -432,8 +432,8 @@ func TestListenBucketNotification(t *testing.T) {
 	}
 
 	// write listener config to storage layer
-	lcfgs := []listenerConfig{lcfg}
-	if err := persistListenerConfig(bucketName, lcfgs, obj); err != nil {
+	lcfgs := []ListenerConfig{lcfg}
+	if err := obj.SetBucketListener(bucketName, lcfgs); err != nil {
 		t.Fatalf("Test Setup error: %v", err)
 	}
 
@@ -517,13 +517,13 @@ func TestAddRemoveBucketListenerConfig(t *testing.T) {
 		t.Fatalf("Failed to initialize event notifier: %v", err)
 	}
 
-	// Make a bucket to store topicConfigs.
+	// Make a bucket to store TopicConfigs.
 	randBucket := getRandomBucketName()
 	if err := obj.MakeBucketWithLocation(randBucket, ""); err != nil {
 		t.Fatalf("Failed to make bucket %s", randBucket)
 	}
 
-	// Add a topicConfig to an empty notificationConfig.
+	// Add a TopicConfig to an empty NotificationConfig.
 	accountID := fmt.Sprintf("%d", UTCNow().UnixNano())
 	accountARN := fmt.Sprintf(
 		"arn:minio:sqs:%s:%s:listen-%s",
@@ -533,7 +533,7 @@ func TestAddRemoveBucketListenerConfig(t *testing.T) {
 	)
 
 	// Make topic configuration
-	filterRules := []filterRule{
+	FilterRules := []FilterRule{
 		{
 			Name:  "prefix",
 			Value: "minio",
@@ -543,22 +543,22 @@ func TestAddRemoveBucketListenerConfig(t *testing.T) {
 			Value: "*.jpg",
 		},
 	}
-	sampleTopicCfg := topicConfig{
+	sampleTopicCfg := TopicConfig{
 		TopicARN: accountARN,
 		ServiceConfig: ServiceConfig{
 			[]string{"s3:ObjectRemoved:*", "s3:ObjectCreated:*"},
-			filterStruct{
-				keyFilter{filterRules},
+			FilterStruct{
+				KeyFilter{FilterRules},
 			},
 			"sns-" + accountID,
 		},
 	}
-	sampleListenerCfg := &listenerConfig{
+	sampleListenerCfg := &ListenerConfig{
 		TopicConfig:  sampleTopicCfg,
 		TargetServer: globalMinioAddr,
 	}
 	testCases := []struct {
-		lCfg        *listenerConfig
+		lCfg        *ListenerConfig
 		expectedErr error
 	}{
 		{sampleListenerCfg, nil},

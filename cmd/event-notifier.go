@@ -17,9 +17,6 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"net"
 	"net/url"
@@ -36,7 +33,7 @@ const (
 type externalNotifier struct {
 	// Per-bucket notification config. This is updated via
 	// PutBucketNotification API.
-	notificationConfigs map[string]*notificationConfig
+	notificationConfigs map[string]*NotificationConfig
 
 	// An external target keeps a connection to an external
 	// service to which events are to be sent. It is a mapping
@@ -49,7 +46,7 @@ type externalNotifier struct {
 type internalNotifier struct {
 	// per-bucket listener configuration. This is updated
 	// when listeners connect or disconnect.
-	listenerConfigs map[string][]listenerConfig
+	listenerConfigs map[string][]ListenerConfig
 
 	// An internal target is a peer Minio server, that is
 	// connected to a listening client. Here, targets is a map of
@@ -242,29 +239,29 @@ func (en *eventNotifier) SendListenerEvent(arn string, event []NotificationEvent
 }
 
 // Fetch bucket notification config for an input bucket.
-func (en eventNotifier) GetBucketNotificationConfig(bucket string) *notificationConfig {
+func (en eventNotifier) GetBucketNotificationConfig(bucket string) *NotificationConfig {
 	en.external.rwMutex.RLock()
 	defer en.external.rwMutex.RUnlock()
 	return en.external.notificationConfigs[bucket]
 }
 
-func (en *eventNotifier) SetBucketNotificationConfig(bucket string, ncfg *notificationConfig) {
+func (en *eventNotifier) SetBucketNotificationConfig(bucket string, nCfg *NotificationConfig) {
 	en.external.rwMutex.Lock()
-	if ncfg == nil {
+	if nCfg == nil {
 		delete(en.external.notificationConfigs, bucket)
 	} else {
-		en.external.notificationConfigs[bucket] = ncfg
+		en.external.notificationConfigs[bucket] = nCfg
 	}
 	en.external.rwMutex.Unlock()
 }
 
-func (en *eventNotifier) GetBucketListenerConfig(bucket string) []listenerConfig {
+func (en *eventNotifier) GetBucketListenerConfig(bucket string) []ListenerConfig {
 	en.internal.rwMutex.RLock()
 	defer en.internal.rwMutex.RUnlock()
 	return en.internal.listenerConfigs[bucket]
 }
 
-func (en *eventNotifier) SetBucketListenerConfig(bucket string, lcfg []listenerConfig) error {
+func (en *eventNotifier) SetBucketListenerConfig(bucket string, lcfg []ListenerConfig) error {
 	en.internal.rwMutex.Lock()
 	defer en.internal.rwMutex.Unlock()
 	if len(lcfg) == 0 {
@@ -362,198 +359,46 @@ func eventNotify(event eventData) {
 	eventNotifyForBucketListeners(eventType, objectName, event.Bucket, notificationEvent)
 }
 
-// loads notification config if any for a given bucket, returns
-// structured notification config.
-func loadNotificationConfig(bucket string, objAPI ObjectLayer) (*notificationConfig, error) {
-	// Construct the notification config path.
-	ncPath := path.Join(bucketConfigPrefix, bucket, bucketNotificationConfig)
-
-	// Acquire a write lock on notification config before modifying.
-	objLock := globalNSMutex.NewNSLock(minioMetaBucket, ncPath)
-	objLock.RLock()
-	defer objLock.RUnlock()
-
-	var buffer bytes.Buffer
-	err := objAPI.GetObject(minioMetaBucket, ncPath, 0, -1, &buffer) // Read everything.
-	if err != nil {
-		// 'notification.xml' not found return
-		// 'errNoSuchNotifications'.  This is default when no
-		// bucket notifications are found on the bucket.
-		if isErrObjectNotFound(err) || isErrIncompleteBody(err) {
-			return nil, errNoSuchNotifications
-		}
-		errorIf(err, "Unable to load bucket-notification for bucket %s", bucket)
-		// Returns error for other errors.
-		return nil, err
-	}
-
-	// Unmarshal notification bytes.
-	notificationConfigBytes := buffer.Bytes()
-	notificationCfg := &notificationConfig{}
-	if err = xml.Unmarshal(notificationConfigBytes, &notificationCfg); err != nil {
-		return nil, err
-	}
-
-	// Return success.
-	return notificationCfg, nil
-}
-
-// loads notification config if any for a given bucket, returns
-// structured notification config.
-func loadListenerConfig(bucket string, objAPI ObjectLayer) ([]listenerConfig, error) {
-	// in single node mode, there are no peers, so in this case
-	// there is no configuration to load, as any previously
-	// connected listen clients have been disconnected
-	if !globalIsDistXL {
-		return nil, nil
-	}
-
-	// Construct the notification config path.
-	lcPath := path.Join(bucketConfigPrefix, bucket, bucketListenerConfig)
-
-	// Acquire a write lock on notification config before modifying.
-	objLock := globalNSMutex.NewNSLock(minioMetaBucket, lcPath)
-	objLock.RLock()
-	defer objLock.RUnlock()
-
-	var buffer bytes.Buffer
-	err := objAPI.GetObject(minioMetaBucket, lcPath, 0, -1, &buffer)
-	if err != nil {
-		// 'notification.xml' not found return
-		// 'errNoSuchNotifications'.  This is default when no
-		// bucket listeners are found on the bucket.
-		if isErrObjectNotFound(err) {
-			return nil, errNoSuchNotifications
-		}
-		errorIf(err, "Unable to load bucket-listeners for bucket %s", bucket)
-		// Returns error for other errors.
-		return nil, err
-	}
-
-	// Unmarshal notification bytes.
-	var lCfg []listenerConfig
-	lConfigBytes := buffer.Bytes()
-	if err = json.Unmarshal(lConfigBytes, &lCfg); err != nil {
-		errorIf(err, "Unable to unmarshal listener config from JSON.")
-		return nil, err
-	}
-
-	// Return success.
-	return lCfg, nil
-}
-
-func persistNotificationConfig(bucket string, ncfg *notificationConfig, obj ObjectLayer) error {
-	// marshal to xml
-	buf, err := xml.Marshal(ncfg)
-	if err != nil {
-		errorIf(err, "Unable to marshal notification configuration into XML")
-		return err
-	}
-
-	// build path
-	ncPath := path.Join(bucketConfigPrefix, bucket, bucketNotificationConfig)
-	// Acquire a write lock on notification config before modifying.
-	objLock := globalNSMutex.NewNSLock(minioMetaBucket, ncPath)
-	objLock.Lock()
-	defer objLock.Unlock()
-
-	// write object to path
-	sha256Sum := getSHA256Hash(buf)
-	_, err = obj.PutObject(minioMetaBucket, ncPath, int64(len(buf)), bytes.NewReader(buf), nil, sha256Sum)
-	if err != nil {
-		errorIf(err, "Unable to write bucket notification configuration.")
-		return err
-	}
-	return nil
-}
-
-// Persists validated listener config to object layer.
-func persistListenerConfig(bucket string, lcfg []listenerConfig, obj ObjectLayer) error {
-	buf, err := json.Marshal(lcfg)
-	if err != nil {
-		errorIf(err, "Unable to marshal listener config to JSON.")
-		return err
-	}
-
-	// build path
-	lcPath := path.Join(bucketConfigPrefix, bucket, bucketListenerConfig)
-	// Acquire a write lock on notification config before modifying.
-	objLock := globalNSMutex.NewNSLock(minioMetaBucket, lcPath)
-	objLock.Lock()
-	defer objLock.Unlock()
-
-	// write object to path
-	sha256Sum := getSHA256Hash(buf)
-	_, err = obj.PutObject(minioMetaBucket, lcPath, int64(len(buf)), bytes.NewReader(buf), nil, sha256Sum)
-	if err != nil {
-		errorIf(err, "Unable to write bucket listener configuration to object layer.")
-	}
-	return err
-}
-
-// Removes notification.xml for a given bucket, only used during DeleteBucket.
-func removeNotificationConfig(bucket string, objAPI ObjectLayer) error {
-	// Verify bucket is valid.
-	if !IsValidBucketName(bucket) {
-		return BucketNameInvalid{Bucket: bucket}
-	}
-
-	ncPath := path.Join(bucketConfigPrefix, bucket, bucketNotificationConfig)
-
-	// Acquire a write lock on notification config before modifying.
-	objLock := globalNSMutex.NewNSLock(minioMetaBucket, ncPath)
-	objLock.Lock()
-	defer objLock.Unlock()
-	return objAPI.DeleteObject(minioMetaBucket, ncPath)
-}
-
-// Remove listener configuration from storage layer. Used when a bucket is deleted.
-func removeListenerConfig(bucket string, objAPI ObjectLayer) error {
-	// make the path
-	lcPath := path.Join(bucketConfigPrefix, bucket, bucketListenerConfig)
-
-	// Acquire a write lock on notification config before modifying.
-	objLock := globalNSMutex.NewNSLock(minioMetaBucket, lcPath)
-	objLock.Lock()
-	defer objLock.Unlock()
-	return objAPI.DeleteObject(minioMetaBucket, lcPath)
-}
-
 // Loads both notification and listener config.
-func loadNotificationAndListenerConfig(bucketName string, objAPI ObjectLayer) (nCfg *notificationConfig, lCfg []listenerConfig, err error) {
+func loadNotificationAndListenerConfig(bucketName string, objAPI ObjectLayer) (*NotificationConfig, []ListenerConfig, error) {
 	// Loads notification config if any.
-	nCfg, err = loadNotificationConfig(bucketName, objAPI)
+	nCfg, err := objAPI.GetBucketNotification(bucketName)
 	if err != nil && !isErrIgnored(err, errDiskNotFound, errNoSuchNotifications) {
 		return nil, nil, err
 	}
 
-	// Loads listener config if any.
-	lCfg, err = loadListenerConfig(bucketName, objAPI)
-	if err != nil && !isErrIgnored(err, errDiskNotFound, errNoSuchNotifications) {
-		return nil, nil, err
+	if globalIsDistXL {
+		// Loads listener config if any.
+		lCfg, err := objAPI.GetBucketListener(bucketName)
+		if err != nil && !isErrIgnored(err, errDiskNotFound, errNoSuchNotifications) {
+			return nil, nil, err
+		}
+		return nCfg, lCfg, nil
 	}
-	return nCfg, lCfg, nil
+	return nCfg, nil, nil
 }
 
 // loads all bucket notifications if present.
-func loadAllBucketNotifications(objAPI ObjectLayer) (map[string]*notificationConfig, map[string][]listenerConfig, error) {
+func loadAllBucketNotifications(objAPI ObjectLayer) (map[string]*NotificationConfig, map[string][]ListenerConfig, error) {
 	// List buckets to proceed loading all notification configuration.
 	buckets, err := objAPI.ListBuckets()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	nConfigs := make(map[string]*notificationConfig)
-	lConfigs := make(map[string][]listenerConfig)
+	nConfigs := make(map[string]*NotificationConfig)
+	lConfigs := make(map[string][]ListenerConfig)
 
 	// Loads all bucket notifications.
 	for _, bucket := range buckets {
-		// Load persistent notification and listener configurations
-		// a given bucket name.
-		nConfigs[bucket.Name], lConfigs[bucket.Name], err = loadNotificationAndListenerConfig(bucket.Name, objAPI)
-		if err != nil {
-			return nil, nil, err
+		// Load persistent notification and listener
+		// configurations a given bucket name.
+		ncfg, lcfg, perr := loadNotificationAndListenerConfig(bucket.Name, objAPI)
+		if perr != nil {
+			return nil, nil, perr
 		}
+		nConfigs[bucket.Name] = ncfg
+		lConfigs[bucket.Name] = lcfg
 	}
 
 	// Success.
@@ -773,6 +618,7 @@ func initEventNotifier(objAPI ObjectLayer) error {
 	// Initializes all queue targets.
 	queueTargets, err := loadAllQueueTargets()
 	if err != nil {
+		errorIf(err, "Error loading bucket notifications - %v", err)
 		return err
 	}
 
@@ -786,8 +632,8 @@ func initEventNotifier(objAPI ObjectLayer) error {
 			)
 			if err != nil {
 				errorIf(err, "Unable to initialize listener target logger.")
-				//TODO: improve error
-				return fmt.Errorf("Error initializing listner target logger - %v", err)
+				// TODO: improve error
+				return fmt.Errorf("Error initializing listener target logger %#v", err)
 			}
 			listenTargets[listener.TopicConfig.TopicARN] = ln
 		}

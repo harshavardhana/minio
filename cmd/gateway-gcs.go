@@ -1047,17 +1047,16 @@ func (l *gcsGateway) CompleteMultipartUpload(bucket string, key string, uploadID
 
 // SetBucketPolicies - Set policy on bucket
 func (l *gcsGateway) SetBucketPolicies(bucket string, policyInfo policy.BucketAccessPolicy) error {
-	var policies []BucketAccessPolicy
+	var policies []CannedBucketAccessPolicy
 
 	for prefix, policy := range policy.GetPolicies(policyInfo.Statements, bucket) {
-		policies = append(policies, BucketAccessPolicy{
+		policies = append(policies, CannedBucketAccessPolicy{
 			Prefix: prefix,
 			Policy: policy,
 		})
 	}
 
 	prefix := bucket + "/*" // For all objects inside the bucket.
-
 	if len(policies) != 1 {
 		return traceError(NotImplemented{})
 	}
@@ -1121,4 +1120,28 @@ func (l *gcsGateway) DeleteBucketPolicies(bucket string) error {
 	}
 
 	return nil
+}
+
+func (l *gcsGateway) SetBucketNotification(bucket string, ncfl *NotificationConfig) error {
+	return NotImplemented{}
+}
+
+func (l *gcsGateway) GetBucketNotification(bucket string) (*NotificationConfig, error) {
+	return nil, NotImplemented{}
+}
+
+func (l *gcsGateway) DeleteBucketNotification(bucket string) error {
+	return NotImplemented{}
+}
+
+func (l *gcsGateway) SetBucketListener(bucket string, lcfg []ListenerConfig) error {
+	return NotImplemented{}
+}
+
+func (l *gcsGateway) GetBucketListener(bucket string) ([]ListenerConfig, error) {
+	return nil, NotImplemented{}
+}
+
+func (l *gcsGateway) DeleteBucketListener(bucket string) error {
+	return NotImplemented{}
 }

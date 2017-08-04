@@ -16,6 +16,8 @@
 
 package cmd
 
+import "github.com/minio/minio-go/pkg/policy"
+
 // SetBucketNotificationPeerArgs - Arguments collection to SetBucketNotificationPeer RPC
 // call
 type SetBucketNotificationPeerArgs struct {
@@ -25,7 +27,7 @@ type SetBucketNotificationPeerArgs struct {
 	Bucket string
 
 	// Notification config for the given bucket.
-	NCfg *notificationConfig
+	NCfg *NotificationConfig
 }
 
 // BucketUpdate - implements bucket notification updates,
@@ -51,7 +53,7 @@ type SetBucketListenerPeerArgs struct {
 	Bucket string
 
 	// Listener config for a given bucket.
-	LCfg []listenerConfig
+	LCfg []ListenerConfig
 }
 
 // BucketUpdate - implements bucket listener updates,
@@ -98,7 +100,7 @@ type SetBucketPolicyPeerArgs struct {
 	Bucket string
 
 	// Policy change (serialized to JSON)
-	PChBytes []byte
+	Policy policy.BucketAccessPolicy
 }
 
 // BucketUpdate - implements bucket policy updates,

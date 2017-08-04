@@ -25,12 +25,12 @@ import (
 // Test validates for duplicate configs.
 func TestCheckDuplicateConfigs(t *testing.T) {
 	testCases := []struct {
-		qConfigs        []queueConfig
+		qConfigs        []QueueConfig
 		expectedErrCode APIErrorCode
 	}{
 		// Error for duplicate queue configs.
 		{
-			qConfigs: []queueConfig{
+			qConfigs: []QueueConfig{
 				{
 					QueueARN: "arn:minio:sqs:us-east-1:1:redis",
 				},
@@ -42,7 +42,7 @@ func TestCheckDuplicateConfigs(t *testing.T) {
 		},
 		// Valid queue configs.
 		{
-			qConfigs: []queueConfig{
+			qConfigs: []QueueConfig{
 				{
 					QueueARN: "arn:minio:sqs:us-east-1:1:redis",
 				},
@@ -63,12 +63,12 @@ func TestCheckDuplicateConfigs(t *testing.T) {
 // Tests for validating filter rules.
 func TestCheckFilterRules(t *testing.T) {
 	testCases := []struct {
-		rules           []filterRule
+		rules           []FilterRule
 		expectedErrCode APIErrorCode
 	}{
 		// Valid prefix and suffix values.
 		{
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "prefix",
 					Value: "test/test1",
@@ -82,7 +82,7 @@ func TestCheckFilterRules(t *testing.T) {
 		},
 		// Invalid filter name.
 		{
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "unknown",
 					Value: "test/test1",
@@ -92,7 +92,7 @@ func TestCheckFilterRules(t *testing.T) {
 		},
 		// Cannot have duplicate prefixes.
 		{
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "prefix",
 					Value: "test/test1",
@@ -106,7 +106,7 @@ func TestCheckFilterRules(t *testing.T) {
 		},
 		// Cannot have duplicate suffixes.
 		{
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "suffix",
 					Value: ".jpg",
@@ -120,7 +120,7 @@ func TestCheckFilterRules(t *testing.T) {
 		},
 		// Filter value cannot be bigger than > 1024.
 		{
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "prefix",
 					Value: strings.Repeat("a", 1025),

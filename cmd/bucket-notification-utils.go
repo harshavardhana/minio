@@ -75,7 +75,7 @@ func isValidFilterName(filterName string) bool {
 }
 
 // checkFilterRules - checks given list of filter rules if all of them are valid.
-func checkFilterRules(filterRules []filterRule) APIErrorCode {
+func checkFilterRules(filterRules []FilterRule) APIErrorCode {
 	ruleSetMap := make(map[string]string)
 	// Validate all filter rules.
 	for _, filterRule := range filterRules {
@@ -176,7 +176,7 @@ func isValidQueueID(queueARN string) bool {
 }
 
 // Check - validates queue configuration and returns error if any.
-func checkQueueConfig(qConfig queueConfig) APIErrorCode {
+func checkQueueConfig(qConfig QueueConfig) APIErrorCode {
 	// Check queue arn is valid.
 	if s3Error := checkQueueARN(qConfig.QueueARN); s3Error != ErrNone {
 		return s3Error
@@ -204,7 +204,7 @@ func checkQueueConfig(qConfig queueConfig) APIErrorCode {
 // Validates all incoming queue configs, checkQueueConfig validates if the
 // input fields for each queues is not malformed and has valid configuration
 // information.  If validation fails bucket notifications are not enabled.
-func validateQueueConfigs(queueConfigs []queueConfig) APIErrorCode {
+func validateQueueConfigs(queueConfigs []QueueConfig) APIErrorCode {
 	for _, qConfig := range queueConfigs {
 		if s3Error := checkQueueConfig(qConfig); s3Error != ErrNone {
 			return s3Error
@@ -215,7 +215,7 @@ func validateQueueConfigs(queueConfigs []queueConfig) APIErrorCode {
 }
 
 // Check all the queue configs for any duplicates.
-func checkDuplicateQueueConfigs(configs []queueConfig) APIErrorCode {
+func checkDuplicateQueueConfigs(configs []QueueConfig) APIErrorCode {
 	queueConfigARNS := set.NewStringSet()
 
 	// Navigate through each configs and count the entries.
@@ -234,7 +234,7 @@ func checkDuplicateQueueConfigs(configs []queueConfig) APIErrorCode {
 // Validates all the bucket notification configuration for their validity,
 // if one of the config is malformed or has invalid data it is rejected.
 // Configuration is never applied partially.
-func validateNotificationConfig(nConfig notificationConfig) APIErrorCode {
+func validateNotificationConfig(nConfig NotificationConfig) APIErrorCode {
 	// Validate all queue configs.
 	if s3Error := validateQueueConfigs(nConfig.QueueConfigs); s3Error != ErrNone {
 		return s3Error

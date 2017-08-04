@@ -183,7 +183,7 @@ func TestGetBucketNotificationHandler(t *testing.T) {
 func testGetBucketNotificationHandler(obj ObjectLayer, instanceType, bucketName string, apiRouter http.Handler,
 	credentials credential, t *testing.T) {
 	// declare sample configs
-	filterRules := []filterRule{
+	filterRules := []FilterRule{
 		{
 			Name:  "prefix",
 			Value: "minio",
@@ -195,13 +195,13 @@ func testGetBucketNotificationHandler(obj ObjectLayer, instanceType, bucketName 
 	}
 	sampleSvcCfg := ServiceConfig{
 		[]string{"s3:ObjectRemoved:*", "s3:ObjectCreated:*"},
-		filterStruct{
-			keyFilter{filterRules},
+		FilterStruct{
+			KeyFilter{filterRules},
 		},
 		"1",
 	}
-	sampleNotifCfg := notificationConfig{
-		QueueConfigs: []queueConfig{
+	sampleNotifCfg := NotificationConfig{
+		QueueConfigs: []QueueConfig{
 			{
 				ServiceConfig: sampleSvcCfg,
 				QueueARN:      "testqARN",
@@ -218,7 +218,7 @@ func testGetBucketNotificationHandler(obj ObjectLayer, instanceType, bucketName 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("Unexpected http response %d", rec.Code)
 	}
-	if err = persistNotificationConfig(bucketName, &sampleNotifCfg, obj); err != nil {
+	if err = obj.SetBucketNotification(bucketName, &sampleNotifCfg); err != nil {
 		t.Fatalf("Unable to save notification config %s", err)
 	}
 	rec = httptest.NewRecorder()
@@ -235,7 +235,7 @@ func testGetBucketNotificationHandler(obj ObjectLayer, instanceType, bucketName 
 	if err != nil {
 		t.Fatalf("Unexpected error %s", err)
 	}
-	nConfig := notificationConfig{}
+	nConfig := NotificationConfig{}
 	if err = xml.Unmarshal(notificationBytes, &nConfig); err != nil {
 		t.Fatalf("Unexpected XML received %s", err)
 	}
@@ -310,7 +310,7 @@ func testRemoveNotificationConfig(obj ObjectLayer, instanceType, bucketName stri
 		{randBucket, nil},
 	}
 	for i, test := range testCases {
-		tErr := removeNotificationConfig(test.bucketName, obj)
+		tErr := obj.DeleteBucketNotification(test.bucketName)
 		if tErr != test.expectedErr {
 			t.Errorf("Test %d: %s expected error %v, but received %v", i+1, instanceType, test.expectedErr, tErr)
 		}

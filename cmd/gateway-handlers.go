@@ -17,17 +17,13 @@
 package cmd
 
 import (
-	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
 
 	"encoding/hex"
-	"encoding/json"
 
 	router "github.com/gorilla/mux"
-	"github.com/minio/minio-go/pkg/policy"
 )
 
 // GetObjectHandler - GET Object
@@ -386,154 +382,6 @@ func (api gatewayAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.R
 		Host:      host,
 		Port:      port,
 	})
-}
-
-// PutBucketPolicyHandler - PUT Bucket policy
-// -----------------
-// This implementation of the PUT operation uses the policy
-// subresource to add to or replace a policy on a bucket
-func (api gatewayAPIHandlers) PutBucketPolicyHandler(w http.ResponseWriter, r *http.Request) {
-	objAPI := api.ObjectAPI()
-	if objAPI == nil {
-		writeErrorResponse(w, ErrServerNotInitialized, r.URL)
-		return
-	}
-
-	if s3Error := checkRequestAuthType(r, "", "", serverConfig.GetRegion()); s3Error != ErrNone {
-		writeErrorResponse(w, s3Error, r.URL)
-		return
-	}
-
-	vars := router.Vars(r)
-	bucket := vars["bucket"]
-
-	// Before proceeding validate if bucket exists.
-	_, err := objAPI.GetBucketInfo(bucket)
-	if err != nil {
-		errorIf(err, "Unable to find bucket info.")
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
-	// If Content-Length is unknown or zero, deny the
-	// request. PutBucketPolicy always needs a Content-Length.
-	if r.ContentLength == -1 || r.ContentLength == 0 {
-		writeErrorResponse(w, ErrMissingContentLength, r.URL)
-		return
-	}
-	// If Content-Length is greater than maximum allowed policy size.
-	if r.ContentLength > maxAccessPolicySize {
-		writeErrorResponse(w, ErrEntityTooLarge, r.URL)
-		return
-	}
-
-	// Read access policy up to maxAccessPolicySize.
-	// http://docs.aws.amazon.com/AmazonS3/latest/dev/access-policy-language-overview.html
-	// bucket policies are limited to 20KB in size, using a limit reader.
-	policyBytes, err := ioutil.ReadAll(io.LimitReader(r.Body, maxAccessPolicySize))
-	if err != nil {
-		errorIf(err, "Unable to read from client.")
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
-	policyInfo := policy.BucketAccessPolicy{}
-	if err = json.Unmarshal(policyBytes, &policyInfo); err != nil {
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
-	if err = objAPI.SetBucketPolicies(bucket, policyInfo); err != nil {
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
-	globalBucketPolicies.SetBucketPolicy(bucket, policyChange{false, policyInfo})
-
-	// Success.
-	writeSuccessNoContent(w)
-}
-
-// DeleteBucketPolicyHandler - DELETE Bucket policy
-// -----------------
-// This implementation of the DELETE operation uses the policy
-// subresource to add to remove a policy on a bucket.
-func (api gatewayAPIHandlers) DeleteBucketPolicyHandler(w http.ResponseWriter, r *http.Request) {
-	objAPI := api.ObjectAPI()
-	if objAPI == nil {
-		writeErrorResponse(w, ErrServerNotInitialized, r.URL)
-		return
-	}
-
-	if s3Error := checkRequestAuthType(r, "", "", serverConfig.GetRegion()); s3Error != ErrNone {
-		writeErrorResponse(w, s3Error, r.URL)
-		return
-	}
-
-	vars := router.Vars(r)
-	bucket := vars["bucket"]
-
-	// Before proceeding validate if bucket exists.
-	_, err := objAPI.GetBucketInfo(bucket)
-	if err != nil {
-		errorIf(err, "Unable to find bucket info.")
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
-	// Delete bucket access policy.
-	objAPI.DeleteBucketPolicies(bucket)
-
-	globalBucketPolicies.SetBucketPolicy(bucket, policyChange{
-		true, sentinelBucketPolicy,
-	})
-
-	// Success.
-	writeSuccessNoContent(w)
-}
-
-// GetBucketPolicyHandler - GET Bucket policy
-// -----------------
-// This operation uses the policy
-// subresource to return the policy of a specified bucket.
-func (api gatewayAPIHandlers) GetBucketPolicyHandler(w http.ResponseWriter, r *http.Request) {
-	objAPI := api.ObjectAPI()
-	if objAPI == nil {
-		writeErrorResponse(w, ErrServerNotInitialized, r.URL)
-		return
-	}
-
-	if s3Error := checkRequestAuthType(r, "", "", serverConfig.GetRegion()); s3Error != ErrNone {
-		writeErrorResponse(w, s3Error, r.URL)
-		return
-	}
-
-	vars := router.Vars(r)
-	bucket := vars["bucket"]
-
-	// Before proceeding validate if bucket exists.
-	_, err := objAPI.GetBucketInfo(bucket)
-	if err != nil {
-		errorIf(err, "Unable to find bucket info.")
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
-	bp, err := objAPI.GetBucketPolicies(bucket)
-	if err != nil {
-		errorIf(err, "Unable to read bucket policy.")
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-
-	policyBytes, err := json.Marshal(bp)
-	if err != nil {
-		errorIf(err, "Unable to read bucket policy.")
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
-	}
-	// Write to client.
-	w.Write(policyBytes)
 }
 
 // GetBucketNotificationHandler - This implementation of the GET

@@ -16,7 +16,11 @@
 
 package cmd
 
-import "io"
+import (
+	"io"
+
+	"github.com/minio/minio-go/pkg/policy"
+)
 
 // ObjectLayer implements primitives for object API layer.
 type ObjectLayer interface {
@@ -30,6 +34,19 @@ type ObjectLayer interface {
 	ListBuckets() (buckets []BucketInfo, err error)
 	DeleteBucket(bucket string) error
 	ListObjects(bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error)
+
+	// Bucket policy operations.
+	SetBucketPolicies(bucket string, p policy.BucketAccessPolicy) error
+	GetBucketPolicies(bucket string) (policy.BucketAccessPolicy, error)
+	DeleteBucketPolicies(bucket string) error
+
+	// Bucket notification operations.
+	SetBucketNotification(bucket string, nconfig *NotificationConfig) error
+	GetBucketNotification(bucket string) (*NotificationConfig, error)
+	DeleteBucketNotification(bucket string) error
+	SetBucketListener(bucket string, lconfig []ListenerConfig) error
+	GetBucketListener(bucket string) ([]ListenerConfig, error)
+	DeleteBucketListener(bucket string) error
 
 	// Object operations.
 	GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer) (err error)

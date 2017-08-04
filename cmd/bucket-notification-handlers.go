@@ -54,6 +54,11 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 	vars := mux.Vars(r)
 	bucket := vars["bucket"]
 
+	// Acquire a read lock on bucket before reading its configuration.
+	bucketLock := globalNSMutex.NewNSLock(bucket, "")
+	bucketLock.RLock()
+	defer bucketLock.RUnlock()
+
 	_, err := objAPI.GetBucketInfo(bucket)
 	if err != nil {
 		errorIf(err, "Unable to find bucket info.")
@@ -61,19 +66,21 @@ func (api objectAPIHandlers) GetBucketNotificationHandler(w http.ResponseWriter,
 		return
 	}
 
-	// Attempt to successfully load notification config.
-	nConfig, err := loadNotificationConfig(bucket, objAPI)
+	// Attempt to successfully get notification config.
+	nCfg, err := objAPI.GetBucketNotification(bucket)
 	if err != nil && err != errNoSuchNotifications {
 		errorIf(err, "Unable to read notification configuration.")
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
+
 	// For no notifications we write a dummy XML.
-	if err == errNoSuchNotifications {
+	if errorCause(err) == errNoSuchNotifications {
 		// Complies with the s3 behavior in this regard.
-		nConfig = &notificationConfig{}
+		nCfg = &NotificationConfig{}
 	}
-	notificationBytes, err := xml.Marshal(nConfig)
+
+	notificationBytes, err := xml.Marshal(nCfg)
 	if err != nil {
 		// For any marshalling failure.
 		errorIf(err, "Unable to marshal notification configuration into XML.", err)
@@ -108,6 +115,12 @@ func (api objectAPIHandlers) PutBucketNotificationHandler(w http.ResponseWriter,
 	vars := mux.Vars(r)
 	bucket := vars["bucket"]
 
+	// Acquire a write lock on bucket before modifying its configuration.
+	bucketLock := globalNSMutex.NewNSLock(bucket, "")
+	bucketLock.Lock()
+	// Release lock after notifying peers
+	defer bucketLock.Unlock()
+
 	_, err := objectAPI.GetBucketInfo(bucket)
 	if err != nil {
 		errorIf(err, "Unable to find bucket info.")
@@ -135,58 +148,33 @@ func (api objectAPIHandlers) PutBucketNotificationHandler(w http.ResponseWriter,
 		return
 	}
 
-	var notificationCfg notificationConfig
+	var nCfg = &NotificationConfig{}
+
 	// Unmarshal notification bytes.
 	notificationConfigBytes := buffer.Bytes()
-	if err = xml.Unmarshal(notificationConfigBytes, &notificationCfg); err != nil {
+	if err = xml.Unmarshal(notificationConfigBytes, nCfg); err != nil {
 		errorIf(err, "Unable to parse notification configuration XML.")
 		writeErrorResponse(w, ErrMalformedXML, r.URL)
 		return
 	} // Successfully marshalled notification configuration.
 
 	// Validate unmarshalled bucket notification configuration.
-	if s3Error := validateNotificationConfig(notificationCfg); s3Error != ErrNone {
+	if s3Error := validateNotificationConfig(*nCfg); s3Error != ErrNone {
 		writeErrorResponse(w, s3Error, r.URL)
 		return
 	}
 
-	// Put bucket notification config.
-	err = PutBucketNotificationConfig(bucket, &notificationCfg, objectAPI)
-	if err != nil {
+	// Sets new bucket notification.
+	if err = objectAPI.SetBucketNotification(bucket, nCfg); err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
 
+	// All servers (including local) are told to update in-memory config
+	S3PeersUpdateBucketNotification(bucket, nCfg)
+
 	// Success.
 	writeSuccessResponseHeadersOnly(w)
-}
-
-// PutBucketNotificationConfig - Put a new notification config for a
-// bucket (overwrites any previous config) persistently, updates
-// global in-memory state, and notify other nodes in the cluster (if
-// any)
-func PutBucketNotificationConfig(bucket string, ncfg *notificationConfig, objAPI ObjectLayer) error {
-	if ncfg == nil {
-		return errInvalidArgument
-	}
-
-	// Acquire a write lock on bucket before modifying its
-	// configuration.
-	bucketLock := globalNSMutex.NewNSLock(bucket, "")
-	bucketLock.Lock()
-	// Release lock after notifying peers
-	defer bucketLock.Unlock()
-
-	// persist config to disk
-	err := persistNotificationConfig(bucket, ncfg, objAPI)
-	if err != nil {
-		return fmt.Errorf("Unable to persist Bucket notification config to object layer - config=%v errMsg=%v", *ncfg, err)
-	}
-
-	// All servers (including local) are told to update in-memory config
-	S3PeersUpdateBucketNotification(bucket, ncfg)
-
-	return nil
 }
 
 // writeNotification marshals notification message before writing to client.
@@ -303,17 +291,17 @@ func (api objectAPIHandlers) ListenBucketNotificationHandler(w http.ResponseWrit
 		snsTypeMinio,
 		globalMinioAddr,
 	)
-	var filterRules []filterRule
 
+	var filterRules []FilterRule
 	for _, prefix := range prefixes {
-		filterRules = append(filterRules, filterRule{
+		filterRules = append(filterRules, FilterRule{
 			Name:  "prefix",
 			Value: prefix,
 		})
 	}
 
 	for _, suffix := range suffixes {
-		filterRules = append(filterRules, filterRule{
+		filterRules = append(filterRules, FilterRule{
 			Name:  "suffix",
 			Value: suffix,
 		})
@@ -321,14 +309,12 @@ func (api objectAPIHandlers) ListenBucketNotificationHandler(w http.ResponseWrit
 
 	// Make topic configuration corresponding to this
 	// ListenBucketNotification request.
-	topicCfg := &topicConfig{
+	topicCfg := &TopicConfig{
 		TopicARN: accountARN,
 		ServiceConfig: ServiceConfig{
 			Events: events,
-			Filter: struct {
-				Key keyFilter `xml:"S3Key,omitempty" json:"S3Key,omitempty"`
-			}{
-				Key: keyFilter{
+			Filter: FilterStruct{
+				Key: KeyFilter{
 					FilterRules: filterRules,
 				},
 			},
@@ -353,7 +339,7 @@ func (api objectAPIHandlers) ListenBucketNotificationHandler(w http.ResponseWrit
 	// Update topic config to bucket config and persist - as soon
 	// as this call compelets, events may start appearing in
 	// nEventCh
-	lc := listenerConfig{
+	lc := ListenerConfig{
 		TopicConfig:  *topicCfg,
 		TargetServer: globalMinioAddr,
 	}
@@ -374,7 +360,7 @@ func (api objectAPIHandlers) ListenBucketNotificationHandler(w http.ResponseWrit
 
 // AddBucketListenerConfig - Updates on disk state of listeners, and
 // updates all peers with the change in listener config.
-func AddBucketListenerConfig(bucket string, lcfg *listenerConfig, objAPI ObjectLayer) error {
+func AddBucketListenerConfig(bucket string, lcfg *ListenerConfig, objAPI ObjectLayer) error {
 	if lcfg == nil {
 		return errInvalidArgument
 	}
@@ -383,34 +369,34 @@ func AddBucketListenerConfig(bucket string, lcfg *listenerConfig, objAPI ObjectL
 	// add new lid to listeners and persist to object layer.
 	listenerCfgs = append(listenerCfgs, *lcfg)
 
-	// Acquire a write lock on bucket before modifying its
-	// configuration.
-	bucketLock := globalNSMutex.NewNSLock(bucket, "")
-	bucketLock.Lock()
-	// Release lock after notifying peers
-	defer bucketLock.Unlock()
-
 	// update persistent config if dist XL
 	if globalIsDistXL {
-		err := persistListenerConfig(bucket, listenerCfgs, objAPI)
+		// Acquire a write lock on bucket before modifying its
+		// configuration.
+		bucketLock := globalNSMutex.NewNSLock(bucket, "")
+		bucketLock.Lock()
+		// Release lock after notifying peers
+		defer bucketLock.Unlock()
+
+		err := objAPI.SetBucketListener(bucket, listenerCfgs)
 		if err != nil {
 			errorIf(err, "Error persisting listener config when adding a listener.")
 			return err
 		}
+		// persistence success - now update in-memory globals on all
+		// peers (including local)
+		S3PeersUpdateBucketListener(bucket, listenerCfgs)
 	}
 
-	// persistence success - now update in-memory globals on all
-	// peers (including local)
-	S3PeersUpdateBucketListener(bucket, listenerCfgs)
 	return nil
 }
 
 // RemoveBucketListenerConfig - removes a given bucket notification config
-func RemoveBucketListenerConfig(bucket string, lcfg *listenerConfig, objAPI ObjectLayer) {
+func RemoveBucketListenerConfig(bucket string, lcfg *ListenerConfig, objAPI ObjectLayer) {
 	listenerCfgs := globalEventNotifier.GetBucketListenerConfig(bucket)
 
 	// remove listener with matching ARN - if not found ignore and exit.
-	var updatedLcfgs []listenerConfig
+	var updatedLcfgs []ListenerConfig
 	found := false
 	for k, configuredLcfg := range listenerCfgs {
 		if configuredLcfg.TopicConfig.TopicARN == lcfg.TopicConfig.TopicARN {
@@ -424,23 +410,23 @@ func RemoveBucketListenerConfig(bucket string, lcfg *listenerConfig, objAPI Obje
 		return
 	}
 
-	// Acquire a write lock on bucket before modifying its
-	// configuration.
-	bucketLock := globalNSMutex.NewNSLock(bucket, "")
-	bucketLock.Lock()
-	// Release lock after notifying peers
-	defer bucketLock.Unlock()
-
 	// update persistent config if dist XL
 	if globalIsDistXL {
-		err := persistListenerConfig(bucket, updatedLcfgs, objAPI)
+		// Acquire a write lock on bucket before modifying its
+		// configuration.
+		bucketLock := globalNSMutex.NewNSLock(bucket, "")
+		bucketLock.Lock()
+		// Release lock after notifying peers
+		defer bucketLock.Unlock()
+
+		err := objAPI.SetBucketListener(bucket, updatedLcfgs)
 		if err != nil {
 			errorIf(err, "Error persisting listener config when removing a listener.")
 			return
 		}
-	}
 
-	// persistence success - now update in-memory globals on all
-	// peers (including local)
-	S3PeersUpdateBucketListener(bucket, updatedLcfgs)
+		// persistence success - now update in-memory globals on all
+		// peers (including local)
+		S3PeersUpdateBucketListener(bucket, updatedLcfgs)
+	}
 }

@@ -654,22 +654,22 @@ func (api objectAPIHandlers) DeleteBucketHandler(w http.ResponseWriter, r *http.
 	}
 
 	// Delete bucket access policy, if present - ignore any errors.
-	_ = removeBucketPolicy(bucket, objectAPI)
+	_ = objectAPI.DeleteBucketPolicies(bucket)
 
 	// Notify all peers (including self) to update in-memory state
-	S3PeersUpdateBucketPolicy(bucket, policyChange{true, sentinelBucketPolicy})
+	S3PeersUpdateBucketPolicy(bucket, sentinelBucketPolicy)
 
 	// Delete notification config, if present - ignore any errors.
-	_ = removeNotificationConfig(bucket, objectAPI)
+	objectAPI.DeleteBucketNotification(bucket)
 
 	// Notify all peers (including self) to update in-memory state
 	S3PeersUpdateBucketNotification(bucket, nil)
 
 	// Delete listener config, if present - ignore any errors.
-	_ = removeListenerConfig(bucket, objectAPI)
+	objectAPI.DeleteBucketListener(bucket)
 
 	// Notify all peers (including self) to update in-memory state
-	S3PeersUpdateBucketListener(bucket, []listenerConfig{})
+	S3PeersUpdateBucketListener(bucket, []ListenerConfig{})
 
 	// Write success response.
 	writeSuccessNoContent(w)

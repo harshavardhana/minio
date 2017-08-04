@@ -29,6 +29,7 @@ import (
 	"sort"
 	"syscall"
 
+	"github.com/minio/minio-go/pkg/policy"
 	"github.com/minio/minio/pkg/lock"
 	"github.com/minio/sha256-simd"
 )
@@ -307,6 +308,46 @@ func (fs fsObjects) DeleteBucket(bucket string) error {
 	}
 
 	return nil
+}
+
+// SetBucketPolicies - save a new bucket policy structure.
+func (fs fsObjects) SetBucketPolicies(bucket string, p policy.BucketAccessPolicy) error {
+	return setBucketPolicies(bucket, p, fs)
+}
+
+// GetBucketPolicies - fetch saved bucket policy structure.
+func (fs fsObjects) GetBucketPolicies(bucket string) (p policy.BucketAccessPolicy, err error) {
+	return getBucketPolicies(bucket, fs)
+}
+
+// DeleteBucketPolicies - delete all set bucket policies.
+func (fs fsObjects) DeleteBucketPolicies(bucket string) error {
+	return deleteBucketPolicies(bucket, fs)
+}
+
+// SetBucketNotification - save and set bucket notiification for a given bucket.
+func (fs fsObjects) SetBucketNotification(bucket string, ncfg *NotificationConfig) error {
+	return setBucketNotification(bucket, ncfg, fs)
+}
+
+func (fs fsObjects) GetBucketNotification(bucket string) (*NotificationConfig, error) {
+	return getBucketNotification(bucket, fs)
+}
+
+func (fs fsObjects) DeleteBucketNotification(bucket string) error {
+	return deleteBucketNotification(bucket, fs)
+}
+
+func (fs fsObjects) SetBucketListener(bucket string, lcfg []ListenerConfig) error {
+	return setBucketListener(bucket, lcfg, fs)
+}
+
+func (fs fsObjects) GetBucketListener(bucket string) ([]ListenerConfig, error) {
+	return getBucketListener(bucket, fs)
+}
+
+func (fs fsObjects) DeleteBucketListener(bucket string) error {
+	return deleteBucketListener(bucket, fs)
 }
 
 /// Object Operations

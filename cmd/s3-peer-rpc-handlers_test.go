@@ -17,7 +17,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"os"
 	"path"
 	"testing"
@@ -73,7 +72,7 @@ func (s *TestRPCS3PeerSuite) testS3PeerRPC(t *testing.T) {
 	}
 
 	// Check bucket notification call works.
-	BNPArgs := SetBucketNotificationPeerArgs{Bucket: "bucket", NCfg: &notificationConfig{}}
+	BNPArgs := SetBucketNotificationPeerArgs{Bucket: "bucket", NCfg: &NotificationConfig{}}
 	client := newAuthRPCClient(s.testAuthConf)
 	defer client.Close()
 	err = client.Call("S3.SetBucketNotificationPeer", &BNPArgs, &AuthRPCReply{})
@@ -88,13 +87,7 @@ func (s *TestRPCS3PeerSuite) testS3PeerRPC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check bucket policy update call works.
-	pCh := policyChange{IsRemove: true}
-	pChBytes, err := json.Marshal(pCh)
-	if err != nil {
-		t.Fatal(err)
-	}
-	BPPArgs := SetBucketPolicyPeerArgs{Bucket: "bucket", PChBytes: pChBytes}
+	BPPArgs := SetBucketPolicyPeerArgs{Bucket: "bucket", Policy: sentinelBucketPolicy}
 	err = client.Call("S3.SetBucketPolicyPeer", &BPPArgs, &AuthRPCReply{})
 	if err != nil {
 		t.Fatal(err)

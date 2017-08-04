@@ -20,7 +20,6 @@ import (
 	"io"
 
 	router "github.com/gorilla/mux"
-	"github.com/minio/minio-go/pkg/policy"
 )
 
 // GatewayLayer - Interface to implement gateway mode.
@@ -32,9 +31,6 @@ type GatewayLayer interface {
 
 	AnonPutObject(bucket string, object string, size int64, data io.Reader, metadata map[string]string, sha256sum string) (ObjectInfo, error)
 
-	SetBucketPolicies(string, policy.BucketAccessPolicy) error
-	GetBucketPolicies(string) (policy.BucketAccessPolicy, error)
-	DeleteBucketPolicies(string) error
 	AnonListObjects(bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error)
 	AnonListObjectsV2(bucket, prefix, continuationToken string, fetchOwner bool, delimiter string, maxKeys int) (result ListObjectsV2Info, err error)
 	ListObjectsV2(bucket, prefix, continuationToken string, fetchOwner bool, delimiter string, maxKeys int) (result ListObjectsV2Info, err error)

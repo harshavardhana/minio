@@ -22,13 +22,13 @@ import "testing"
 func TestFilterMatch(t *testing.T) {
 	testCases := []struct {
 		objectName        string
-		rules             []filterRule
+		rules             []FilterRule
 		expectedRuleMatch bool
 	}{
 		// Prefix matches for a parent.
 		{
 			objectName: "test/test1/object.txt",
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "prefix",
 					Value: "test",
@@ -39,7 +39,7 @@ func TestFilterMatch(t *testing.T) {
 		// Prefix matches for the object.
 		{
 			objectName: "test/test1/object.txt",
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "prefix",
 					Value: "test/test1/object",
@@ -50,7 +50,7 @@ func TestFilterMatch(t *testing.T) {
 		// Prefix doesn't match.
 		{
 			objectName: "test/test1/object.txt",
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "prefix",
 					Value: "test/test1/object/",
@@ -61,7 +61,7 @@ func TestFilterMatch(t *testing.T) {
 		// Suffix matches.
 		{
 			objectName: "test/test1/object.txt",
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "suffix",
 					Value: ".txt",
@@ -72,7 +72,7 @@ func TestFilterMatch(t *testing.T) {
 		// Suffix doesn't match but prefix matches.
 		{
 			objectName: "test/test1/object.txt",
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "suffix",
 					Value: ".jpg",
@@ -87,7 +87,7 @@ func TestFilterMatch(t *testing.T) {
 		// Prefix doesn't match but suffix matches.
 		{
 			objectName: "test/test2/object.jpg",
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "suffix",
 					Value: ".jpg",
@@ -102,7 +102,7 @@ func TestFilterMatch(t *testing.T) {
 		// Suffix and prefix doesn't match.
 		{
 			objectName: "test/test2/object.jpg",
-			rules: []filterRule{
+			rules: []FilterRule{
 				{
 					Name:  "suffix",
 					Value: ".txt",

@@ -19,6 +19,8 @@ package cmd
 import (
 	"sort"
 	"sync"
+
+	"github.com/minio/minio-go/pkg/policy"
 )
 
 // list all errors that can be ignore in a bucket operation.
@@ -254,4 +256,44 @@ func (xl xlObjects) DeleteBucket(bucket string) error {
 		xl.undoDeleteBucket(bucket)
 	}
 	return toObjectErr(err, bucket)
+}
+
+// SetBucketPolicies - save a new bucket policy structure.
+func (xl xlObjects) SetBucketPolicies(bucket string, p policy.BucketAccessPolicy) error {
+	return setBucketPolicies(bucket, p, xl)
+}
+
+// GetBucketPolicies - fetch saved bucket policy structure.
+func (xl xlObjects) GetBucketPolicies(bucket string) (p policy.BucketAccessPolicy, err error) {
+	return getBucketPolicies(bucket, xl)
+}
+
+// DeleteBucketPolicies - delete all set bucket policies.
+func (xl xlObjects) DeleteBucketPolicies(bucket string) (err error) {
+	return deleteBucketPolicies(bucket, xl)
+}
+
+// SetBucketNotification - save and set bucket notiification for a given bucket.
+func (xl xlObjects) SetBucketNotification(bucket string, ncfg *NotificationConfig) error {
+	return setBucketNotification(bucket, ncfg, xl)
+}
+
+func (xl xlObjects) GetBucketNotification(bucket string) (*NotificationConfig, error) {
+	return getBucketNotification(bucket, xl)
+}
+
+func (xl xlObjects) DeleteBucketNotification(bucket string) error {
+	return deleteBucketNotification(bucket, xl)
+}
+
+func (xl xlObjects) SetBucketListener(bucket string, lcfg []ListenerConfig) error {
+	return setBucketListener(bucket, lcfg, xl)
+}
+
+func (xl xlObjects) GetBucketListener(bucket string) ([]ListenerConfig, error) {
+	return getBucketListener(bucket, xl)
+}
+
+func (xl xlObjects) DeleteBucketListener(bucket string) error {
+	return deleteBucketListener(bucket, xl)
 }

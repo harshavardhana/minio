@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net"
@@ -263,6 +264,12 @@ func (api objectAPIHandlers) PutBucketPolicyHandler(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Acquire a write lock on bucket before modifying its configuration.
+	bucketLock := globalNSMutex.NewNSLock(bucket, "")
+	bucketLock.Lock()
+	// Release lock after notifying peers
+	defer bucketLock.Unlock()
+
 	// Parse validate and save bucket policy.
 	if s3Error := parseAndPersistBucketPolicy(bucket, policyBytes, objAPI); s3Error != ErrNone {
 		writeErrorResponse(w, s3Error, r.URL)
@@ -300,18 +307,9 @@ func (api objectAPIHandlers) DeleteBucketPolicyHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	// Delete bucket access policy, by passing an empty policy
-	// struct.
-	err = persistAndNotifyBucketPolicyChange(bucket, policyChange{
-		true, sentinelBucketPolicy,
-	}, objAPI)
-	if err != nil {
-		switch err.(type) {
-		case BucketPolicyNotFound:
-			writeErrorResponse(w, ErrNoSuchBucketPolicy, r.URL)
-		default:
-			writeErrorResponse(w, ErrInternalError, r.URL)
-		}
+	// Delete bucket access policy, by passing an empty policy struct.
+	if err = objAPI.DeleteBucketPolicies(bucket); err != nil {
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
 
@@ -347,18 +345,21 @@ func (api objectAPIHandlers) GetBucketPolicyHandler(w http.ResponseWriter, r *ht
 	}
 
 	// Read bucket access policy.
-	reader, err := readBucketPolicyJSON(bucket, objAPI)
+	p, err := objAPI.GetBucketPolicies(bucket)
 	if err != nil {
 		errorIf(err, "Unable to read bucket policy.")
-		switch err.(type) {
-		case BucketPolicyNotFound:
-			writeErrorResponse(w, ErrNoSuchBucketPolicy, r.URL)
-		default:
-			writeErrorResponse(w, ErrInternalError, r.URL)
-		}
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	buf, err := json.Marshal(&p)
+	if err != nil {
+		errorIf(err, "Unable to read bucket policy.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
 
 	// Write to client.
-	io.Copy(w, reader)
+	w.Write(buf)
+	w.(http.Flusher).Flush()
 }

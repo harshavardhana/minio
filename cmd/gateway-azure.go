@@ -704,10 +704,10 @@ func azureListBlobsGetParameters(p storage.ListBlobsParameters) url.Values {
 // As the common denominator for minio and azure is readonly and none, we support
 // these two policies at the bucket level.
 func (a *azureObjects) SetBucketPolicies(bucket string, policyInfo policy.BucketAccessPolicy) error {
-	var policies []BucketAccessPolicy
+	var policies []CannedBucketAccessPolicy
 
 	for prefix, policy := range policy.GetPolicies(policyInfo.Statements, bucket) {
-		policies = append(policies, BucketAccessPolicy{
+		policies = append(policies, CannedBucketAccessPolicy{
 			Prefix: prefix,
 			Policy: policy,
 		})
@@ -756,4 +756,28 @@ func (a *azureObjects) DeleteBucketPolicies(bucket string) error {
 	}
 	err := a.client.SetContainerPermissions(bucket, perm, 0, "")
 	return azureToObjectError(traceError(err))
+}
+
+func (a *azureObjects) SetBucketNotification(bucket string, ncfg *NotificationConfig) error {
+	return NotImplemented{}
+}
+
+func (a *azureObjects) GetBucketNotification(bucket string) (*NotificationConfig, error) {
+	return nil, NotImplemented{}
+}
+
+func (a *azureObjects) DeleteBucketNotification(bucket string) error {
+	return NotImplemented{}
+}
+
+func (a *azureObjects) SetBucketListener(bucket string, lcfg []ListenerConfig) error {
+	return NotImplemented{}
+}
+
+func (a *azureObjects) GetBucketListener(bucket string) ([]ListenerConfig, error) {
+	return nil, NotImplemented{}
+}
+
+func (a *azureObjects) DeleteBucketListener(bucket string) error {
+	return NotImplemented{}
 }

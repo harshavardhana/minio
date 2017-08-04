@@ -232,7 +232,7 @@ func eventMatch(eventType string, events []string) (ok bool) {
 }
 
 // Filter rule match, matches an object against the filter rules.
-func filterRuleMatch(object string, frs []filterRule) bool {
+func filterRuleMatch(object string, frs []FilterRule) bool {
 	var prefixMatch, suffixMatch = true, true
 	for _, fr := range frs {
 		if isValidFilterNamePrefix(fr.Name) {

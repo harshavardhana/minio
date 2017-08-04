@@ -17,9 +17,14 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
+	"encoding/xml"
+	"path"
 	"sync"
 
 	humanize "github.com/dustin/go-humanize"
+	"github.com/minio/minio-go/pkg/policy"
 )
 
 const (
@@ -230,4 +235,233 @@ func cleanupDir(storage StorageAPI, volume, dirPath string) error {
 	}
 	err := delFunc(retainSlash(pathJoin(dirPath)))
 	return err
+}
+
+func setBucketPolicies(bucket string, p policy.BucketAccessPolicy, objAPI ObjectLayer) error {
+	// Verify if bucket is valid.
+	if !IsValidBucketName(bucket) {
+		return BucketNameInvalid{Bucket: bucket}
+	}
+	buf, err := json.Marshal(p)
+	if err != nil {
+		return toObjectErr(err, bucket)
+	}
+	policyPath := pathJoin(bucketConfigPrefix, bucket, bucketPolicyConfig)
+	// Acquire a write lock on policy config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, policyPath)
+	objLock.Lock()
+	defer objLock.Unlock()
+
+	sha256Sum := getSHA256Hash(buf)
+	_, err = objAPI.PutObject(minioMetaBucket, policyPath, int64(len(buf)), bytes.NewReader(buf), nil, sha256Sum)
+	return err
+}
+
+func getBucketPolicies(bucket string, objAPI ObjectLayer) (p policy.BucketAccessPolicy, err error) {
+	// Verify if bucket is valid.
+	if !IsValidBucketName(bucket) {
+		return sentinelBucketPolicy, BucketNameInvalid{Bucket: bucket}
+	}
+
+	policyPath := pathJoin(bucketConfigPrefix, bucket, bucketPolicyConfig)
+
+	// Acquire a read lock on policy config before reading.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, policyPath)
+	objLock.RLock()
+	defer objLock.RUnlock()
+
+	var buffer bytes.Buffer
+	if err = objAPI.GetObject(minioMetaBucket, policyPath, 0, -1, &buffer); err != nil {
+		err = errorCause(err)
+		if isErrObjectNotFound(err) || isErrIncompleteBody(err) {
+			err = BucketPolicyNotFound{Bucket: bucket}
+		}
+		return sentinelBucketPolicy, err
+	}
+
+	// Parse the saved policy.
+	if err = parseBucketPolicy(&buffer, &p); err != nil {
+		return sentinelBucketPolicy, err
+
+	}
+	return p, nil
+}
+
+func deleteBucketPolicies(bucket string, objAPI ObjectLayer) error {
+	// Verify if bucket name is valid.
+	if !IsValidBucketName(bucket) {
+		return BucketNameInvalid{Bucket: bucket}
+	}
+	policyPath := pathJoin(bucketConfigPrefix, bucket, bucketPolicyConfig)
+	// Acquire a write lock on policy config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, policyPath)
+	objLock.Lock()
+	defer objLock.Unlock()
+	if err := objAPI.DeleteObject(minioMetaBucket, policyPath); err != nil {
+		err = errorCause(err)
+		if _, ok := err.(ObjectNotFound); ok {
+			err = BucketPolicyNotFound{Bucket: bucket}
+		}
+		return err
+	}
+	return nil
+}
+
+// setBucketNotification - save a new notification config for a
+// bucket (overwrites any previous config) persistently, updates
+// global in-memory state, and notify other nodes in the cluster (if any)
+func setBucketNotification(bucket string, ncfg *NotificationConfig, objAPI ObjectLayer) error {
+	// Verify if bucket name is valid.
+	if !IsValidBucketName(bucket) {
+		return BucketNameInvalid{Bucket: bucket}
+	}
+	if ncfg == nil {
+		return errInvalidArgument
+	}
+
+	// Marshal notification config.
+	buf, err := xml.Marshal(ncfg)
+	if err != nil {
+		return err
+	}
+
+	// Build notification config path.
+	ncPath := path.Join(bucketConfigPrefix, bucket, bucketNotificationConfig)
+	// Acquire a write lock on notification config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, ncPath)
+	objLock.Lock()
+	defer objLock.Unlock()
+
+	// write object to path
+	sha256Sum := getSHA256Hash(buf)
+	_, err = objAPI.PutObject(minioMetaBucket, ncPath, int64(len(buf)), bytes.NewReader(buf), nil, sha256Sum)
+	return err
+}
+
+func getBucketNotification(bucket string, objAPI ObjectLayer) (*NotificationConfig, error) {
+	// Verify if bucket name is valid.
+	if !IsValidBucketName(bucket) {
+		return nil, BucketNameInvalid{Bucket: bucket}
+	}
+
+	// Construct the notification config path.
+	ncPath := path.Join(bucketConfigPrefix, bucket, bucketNotificationConfig)
+
+	// Acquire a read lock on notification config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, ncPath)
+	objLock.RLock()
+	defer objLock.RUnlock()
+
+	var buffer bytes.Buffer
+	err := objAPI.GetObject(minioMetaBucket, ncPath, 0, -1, &buffer) // Read everything.
+	if err != nil {
+		// 'notification.xml' not found return
+		// 'errNoSuchNotifications'.  This is default when no
+		// bucket notifications are found on the bucket.
+		if isErrObjectNotFound(err) || isErrIncompleteBody(err) {
+			return nil, errNoSuchNotifications
+		}
+		// Returns error for other errors.
+		return nil, err
+	}
+
+	// Unmarshal notification bytes.
+	notificationConfigBytes := buffer.Bytes()
+	notificationCfg := &NotificationConfig{}
+	if err = xml.Unmarshal(notificationConfigBytes, &notificationCfg); err != nil {
+		return nil, err
+	}
+	return notificationCfg, nil
+}
+
+// Deletes notification.xml for a given bucket, only used during DeleteBucket.
+func deleteBucketNotification(bucket string, objAPI ObjectLayer) error {
+	// Verify bucket is valid.
+	if !IsValidBucketName(bucket) {
+		return BucketNameInvalid{Bucket: bucket}
+	}
+
+	ncPath := path.Join(bucketConfigPrefix, bucket, bucketNotificationConfig)
+
+	// Acquire a write lock on notification config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, ncPath)
+	objLock.Lock()
+	defer objLock.Unlock()
+	return objAPI.DeleteObject(minioMetaBucket, ncPath)
+}
+
+func setBucketListener(bucket string, lcfg []ListenerConfig, objAPI ObjectLayer) error {
+	// Verify bucket is valid.
+	if !IsValidBucketName(bucket) {
+		return BucketNameInvalid{Bucket: bucket}
+	}
+	buf, err := json.Marshal(lcfg)
+	if err != nil {
+		return err
+	}
+
+	// build path
+	lcPath := path.Join(bucketConfigPrefix, bucket, bucketListenerConfig)
+	// Acquire a write lock on notification config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, lcPath)
+	objLock.Lock()
+	defer objLock.Unlock()
+
+	// write object to path
+	sha256Sum := getSHA256Hash(buf)
+	_, err = objAPI.PutObject(minioMetaBucket, lcPath, int64(len(buf)), bytes.NewReader(buf), nil, sha256Sum)
+	return err
+}
+
+func getBucketListener(bucket string, objAPI ObjectLayer) ([]ListenerConfig, error) {
+	// Verify bucket is valid.
+	if !IsValidBucketName(bucket) {
+		return nil, BucketNameInvalid{Bucket: bucket}
+	}
+	// Construct the notification config path.
+	lcPath := path.Join(bucketConfigPrefix, bucket, bucketListenerConfig)
+
+	// Acquire a write lock on notification config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, lcPath)
+	objLock.RLock()
+	defer objLock.RUnlock()
+
+	var buffer bytes.Buffer
+	err := objAPI.GetObject(minioMetaBucket, lcPath, 0, -1, &buffer)
+	if err != nil {
+		// 'notification.xml' not found return
+		// 'errNoSuchNotifications'.  This is default when no
+		// bucket listeners are found on the bucket.
+		if isErrObjectNotFound(err) {
+			return nil, errNoSuchNotifications
+		}
+		// Returns error for other errors.
+		return nil, err
+	}
+
+	// Unmarshal notification bytes.
+	var lCfg []ListenerConfig
+	lConfigBytes := buffer.Bytes()
+	if err = json.Unmarshal(lConfigBytes, &lCfg); err != nil {
+		return nil, err
+	}
+
+	// Return success.
+	return lCfg, nil
+}
+
+func deleteBucketListener(bucket string, objAPI ObjectLayer) error {
+	// Verify bucket is valid.
+	if !IsValidBucketName(bucket) {
+		return BucketNameInvalid{Bucket: bucket}
+	}
+
+	// make the path
+	lcPath := path.Join(bucketConfigPrefix, bucket, bucketListenerConfig)
+
+	// Acquire a write lock on notification config before modifying.
+	objLock := globalNSMutex.NewNSLock(minioMetaBucket, lcPath)
+	objLock.Lock()
+	defer objLock.Unlock()
+	return objAPI.DeleteObject(minioMetaBucket, lcPath)
 }
