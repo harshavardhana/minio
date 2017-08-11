@@ -131,6 +131,6 @@ func Test32kUNCPath(t *testing.T) {
 
 	_, err = newPosix(longPathName)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, longPathName)
 	}
 }
