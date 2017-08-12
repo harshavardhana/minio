@@ -243,3 +243,25 @@ func TestFixLongPath(t *testing.T) {
 		}
 	}
 }
+
+func benchmarkStat(b *testing.B, path string) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := Stat(path)
+		if err != nil {
+			b.Fatalf("Stat(%q) failed: %v", path, err)
+		}
+	}
+}
+
+func BenchmarkStatDot(b *testing.B) {
+	benchmarkStat(b, ".")
+}
+
+func BenchmarkStatFile(b *testing.B) {
+	benchmarkStat(b, "stat_windows.go")
+}
+
+func BenchmarkStatDir(b *testing.B) {
+	benchmarkStat(b, "../")
+}

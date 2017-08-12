@@ -33,6 +33,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 const errSharingViolation syscall.Errno = 32
@@ -134,6 +135,24 @@ func Stat(name string) (os1.FileInfo, error) {
 	namep, err := syscall.UTF16PtrFromString(fixLongPath(name))
 	if err != nil {
 		return nil, &os1.PathError{Op: "Stat", Path: name, Err: err}
+	}
+
+	// Apparently (see https://github.com/golang/go/issues/19922#issuecomment-300031421)
+	// GetFileAttributesEx is fastest approach to get file info.
+	// It does not work for symlinks. But symlinks are rare,
+	// so try GetFileAttributesEx first.
+	var fs fileStat
+	err = syscall.GetFileAttributesEx(namep, syscall.GetFileExInfoStandard, (*byte)(unsafe.Pointer(&fs.sys)))
+	if err == nil && fs.sys.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+		fs.path = name
+		if !filepath.IsAbs(fs.path) {
+			fs.path, err = syscall.FullPath(fs.path)
+			if err != nil {
+				return nil, &PathError{"FullPath", name, err}
+			}
+		}
+		fs.name = basename(name)
+		return &fs, nil
 	}
 
 	// Use Windows I/O manager to dereference the symbolic link, as per
