@@ -18,7 +18,9 @@ package cmd
 
 import (
 	"net/http"
+	"os"
 
+	"github.com/gorilla/handlers"
 	router "github.com/gorilla/mux"
 )
 
@@ -55,6 +57,11 @@ func registerDistXLRouters(mux *router.Router, endpoints EndpointList) error {
 
 	// Register RPC router for web related calls.
 	return registerBrowserPeerRPCRouter(mux)
+}
+
+// Enables logging handler..
+func setLoggingHandler(h http.Handler) http.Handler {
+	return handlers.LoggingHandler(os.Stdout, h)
 }
 
 // configureServer handler returns final handler for the http server.
@@ -96,6 +103,8 @@ func configureServerHandler(endpoints EndpointList) (http.Handler, error) {
 		setRateLimitHandler,
 		// Validate all the incoming paths.
 		setPathValidityHandler,
+		//
+		setLoggingHandler,
 		// Network statistics
 		setHTTPStatsHandler,
 		// Limits all requests size to a maximum fixed limit
