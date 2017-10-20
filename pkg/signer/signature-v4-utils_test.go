@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
-package cmd
+package signer
 
 import (
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/minio/minio-go/pkg/s3utils"
 )
 
 // TestSkipContentSha256Cksum - Test validate the logic which decides whether
@@ -64,7 +67,7 @@ func TestSkipContentSha256Cksum(t *testing.T) {
 			inputReq.URL.RawQuery = q.Encode()
 		}
 
-		actualResult := skipContentSha256Cksum(inputReq)
+		actualResult := SkipContentSha256Cksum(inputReq)
 		if testCase.expectedResult != actualResult {
 			t.Errorf("Test %d: Expected the result to `%v`, but instead got `%v`", i+1, testCase.expectedResult, actualResult)
 		}
@@ -81,8 +84,8 @@ func TestIsValidRegion(t *testing.T) {
 	}{
 
 		{"", "", true},
-		{globalMinioDefaultRegion, "", true},
-		{globalMinioDefaultRegion, "US", true},
+		{"us-east-1", "", true},
+		{"us-east-1", "US", true},
 		{"us-west-1", "US", false},
 		{"us-west-1", "us-west-1", true},
 		// "US" was old naming convention for 'us-east-1'.
@@ -123,7 +126,7 @@ func TestGetURLEncodedName(t *testing.T) {
 
 	// Tests generated values from url encoded name.
 	for i, testCase := range testCases {
-		result := getURLEncodedName(testCase.inputStr)
+		result := s3utils.EncodePath(testCase.inputStr)
 		if testCase.result != result {
 			t.Errorf("Test %d: Expected URLEncoded result to be \"%s\", but found it to be \"%s\" instead", i+1, testCase.result, result)
 		}
@@ -139,7 +142,7 @@ func TestExtractSignedHeaders(t *testing.T) {
 	// expected header values.
 	expectedHost := "play.minio.io:9000"
 	expectedContentSha256 := "1234abcd"
-	expectedTime := UTCNow().Format(iso8601Format)
+	expectedTime := time.Now().UTC().Format(iso8601Format)
 	expectedTransferEncoding := "gzip"
 	expectedExpect := "100-continue"
 
@@ -155,8 +158,8 @@ func TestExtractSignedHeaders(t *testing.T) {
 	inputHeader.Set("x-amz-date", expectedTime)
 	// calling the function being tested.
 	extractedSignedHeaders, errCode := extractSignedHeaders(signedHeaders, r)
-	if errCode != ErrNone {
-		t.Fatalf("Expected the APIErrorCode to be %d, but got %d", ErrNone, errCode)
+	if errCode != nil {
+		t.Fatalf("Expected the error to be nil, but got %s", errCode)
 	}
 
 	// "x-amz-content-sha256" header value from the extracted result.
@@ -193,16 +196,16 @@ func TestExtractSignedHeaders(t *testing.T) {
 	signedHeaders = append(signedHeaders, "X-Amz-Credential")
 	// expected to fail with `ErrUnsignedHeaders`.
 	_, errCode = extractSignedHeaders(signedHeaders, r)
-	if errCode != ErrUnsignedHeaders {
-		t.Fatalf("Expected the APIErrorCode to %d, but got %d", ErrUnsignedHeaders, errCode)
+	if errCode != UnsignedHeaders {
+		t.Fatalf("Expected the error to %s, but got %s", UnsignedHeaders, errCode)
 	}
 
 	// case where the list of signed headers doesn't contain the host field.
 	signedHeaders = signedHeaders[2:5]
 	// expected to fail with `ErrUnsignedHeaders`.
 	_, errCode = extractSignedHeaders(signedHeaders, r)
-	if errCode != ErrUnsignedHeaders {
-		t.Fatalf("Expected the APIErrorCode to %d, but got %d", ErrUnsignedHeaders, errCode)
+	if errCode != UnsignedHeaders {
+		t.Fatalf("Expected the error to %s, but got %s", UnsignedHeaders, errCode)
 	}
 }
 
@@ -235,7 +238,7 @@ func TestSignV4TrimAll(t *testing.T) {
 	}
 }
 
-// Test getContentSha256Cksum
+// Test GetContentSha256Cksum
 func TestGetContentSha256Cksum(t *testing.T) {
 	testCases := []struct {
 		h        string // header SHA256
@@ -256,7 +259,7 @@ func TestGetContentSha256Cksum(t *testing.T) {
 		if testCase.h != "" {
 			r.Header.Set("x-amz-content-sha256", testCase.h)
 		}
-		got := getContentSha256Cksum(r)
+		got := GetContentSha256Cksum(r)
 		if got != testCase.expected {
 			t.Errorf("Test %d: got:%s expected:%s", i+1, got, testCase.expected)
 		}

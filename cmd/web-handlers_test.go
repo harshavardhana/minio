@@ -34,11 +34,11 @@ import (
 	"strings"
 	"testing"
 
-	jwtgo "github.com/dgrijalva/jwt-go"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/minio/minio-go/pkg/policy"
 	"github.com/minio/minio-go/pkg/set"
 	"github.com/minio/minio/pkg/hash"
+	"github.com/minio/minio/pkg/signer"
 )
 
 // Tests private function writeWebErrorResponse.
@@ -770,13 +770,7 @@ func TestWebCreateURLToken(t *testing.T) {
 }
 
 func getTokenString(accessKey, secretKey string) (string, error) {
-	utcNow := UTCNow()
-	token := jwtgo.NewWithClaims(jwtgo.SigningMethodHS512, jwtgo.StandardClaims{
-		ExpiresAt: utcNow.Add(defaultJWTExpiry).Unix(),
-		IssuedAt:  utcNow.Unix(),
-		Subject:   accessKey,
-	})
-	return token.SignedString([]byte(secretKey))
+	return signer.GetAuthToken(accessKey, secretKey, defaultJWTExpiry)
 }
 
 func testCreateURLToken(obj ObjectLayer, instanceType string, t TestErrHandler) {
@@ -809,12 +803,12 @@ func testCreateURLToken(obj ObjectLayer, instanceType string, t TestErrHandler) 
 	}
 
 	// Ensure the token is valid now. It will expire later.
-	if !isAuthTokenValid(tokenReply.Token) {
+	if !signer.IsAuthTokenValid(tokenReply.Token, credentials.AccessKey, credentials.SecretKey) {
 		t.Fatalf("token is not valid")
 	}
 
 	// Token is invalid.
-	if isAuthTokenValid("") {
+	if signer.IsAuthTokenValid("", credentials.AccessKey, credentials.SecretKey) {
 		t.Fatalf("token shouldn't be valid, but it is")
 	}
 
@@ -824,7 +818,7 @@ func testCreateURLToken(obj ObjectLayer, instanceType string, t TestErrHandler) 
 	}
 
 	// Token has invalid access key.
-	if isAuthTokenValid(token) {
+	if signer.IsAuthTokenValid(token, credentials.AccessKey, credentials.SecretKey) {
 		t.Fatalf("token shouldn't be valid, but it is")
 	}
 }
@@ -1507,7 +1501,7 @@ func TestWebCheckAuthorization(t *testing.T) {
 		if err == nil {
 			t.Fatalf("Test %s: Should fail", rpcCall)
 		} else {
-			if !strings.Contains(err.Error(), errAuthentication.Error()) {
+			if !strings.Contains(err.Error(), signer.TokenDoesNotMatch.Error()) {
 				t.Fatalf("Test %s: should fail with Unauthorized request. Found error: %v", rpcCall, err)
 			}
 		}
@@ -1524,8 +1518,8 @@ func TestWebCheckAuthorization(t *testing.T) {
 		t.Fatalf("Expected the response status to be 403, but instead found `%d`", rec.Code)
 	}
 	resp := string(rec.Body.Bytes())
-	if !strings.EqualFold(resp, errAuthentication.Error()) {
-		t.Fatalf("Unexpected error message, expected: %s, found: `%s`", errAuthentication, resp)
+	if !strings.EqualFold(resp, signer.TokenDoesNotMatch.Error()) {
+		t.Fatalf("Unexpected error message, expected: %s, found: `%s`", signer.TokenDoesNotMatch, resp)
 	}
 
 	rec = httptest.NewRecorder()
@@ -1545,8 +1539,8 @@ func TestWebCheckAuthorization(t *testing.T) {
 		t.Fatalf("Expected the response status to be 403, but instead found `%d`", rec.Code)
 	}
 	resp = string(rec.Body.Bytes())
-	if !strings.EqualFold(resp, errAuthentication.Error()) {
-		t.Fatalf("Unexpected error message, expected: `%s`, found: `%s`", errAuthentication, resp)
+	if !strings.EqualFold(resp, signer.TokenDoesNotMatch.Error()) {
+		t.Fatalf("Unexpected error message, expected: `%s`, found: `%s`", signer.TokenDoesNotMatch, resp)
 	}
 }
 

@@ -20,6 +20,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/minio/minio/pkg/signer"
 )
 
 func TestLogin(t *testing.T) {
@@ -28,8 +30,9 @@ func TestLogin(t *testing.T) {
 		t.Fatalf("Failed to create test config - %v", err)
 	}
 	defer os.RemoveAll(rootPath)
-	creds := globalServerConfig.GetCredential()
-	token, err := authenticateNode(creds.AccessKey, creds.SecretKey)
+
+	creds := serverConfig.GetCredential()
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +76,7 @@ func TestLogin(t *testing.T) {
 				Version:   Version,
 			},
 			skewTime:    0,
-			expectedErr: errAuthentication,
+			expectedErr: signer.TokenDoesNotMatch,
 		},
 	}
 	for i, test := range testCases {

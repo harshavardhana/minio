@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/minio/minio/pkg/signer"
 )
 
 func testAdminCmd(cmd cmdType, t *testing.T) {
@@ -33,8 +35,8 @@ func testAdminCmd(cmd cmdType, t *testing.T) {
 	}
 	defer os.RemoveAll(rootPath)
 
-	creds := globalServerConfig.GetCredential()
-	token, err := authenticateNode(creds.AccessKey, creds.SecretKey)
+	creds := serverConfig.GetCredential()
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,8 +97,8 @@ func TestReInitDisks(t *testing.T) {
 	globalIsXL = true
 	adminServer := adminCmd{}
 
-	creds := globalServerConfig.GetCredential()
-	token, err := authenticateNode(creds.AccessKey, creds.SecretKey)
+	creds := serverConfig.GetCredential()
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +123,7 @@ func TestReInitDisks(t *testing.T) {
 		t.Errorf("Expected to pass, but failed with %v", err)
 	}
 
-	token, err = authenticateNode(creds.AccessKey, creds.SecretKey)
+	token, err = signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,9 +165,8 @@ func TestGetConfig(t *testing.T) {
 	defer os.RemoveAll(rootPath)
 
 	adminServer := adminCmd{}
-	creds := globalServerConfig.GetCredential()
-
-	token, err := authenticateNode(creds.AccessKey, creds.SecretKey)
+	creds := serverConfig.GetCredential()
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,8 +213,8 @@ func TestWriteAndCommitConfig(t *testing.T) {
 	defer os.RemoveAll(rootPath)
 
 	adminServer := adminCmd{}
-	creds := globalServerConfig.GetCredential()
-	token, err := authenticateNode(creds.AccessKey, creds.SecretKey)
+	creds := serverConfig.GetCredential()
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}

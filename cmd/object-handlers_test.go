@@ -31,6 +31,7 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/minio/minio/pkg/auth"
+	"github.com/minio/minio/pkg/signer"
 )
 
 // Type to capture different modifications to API request to simulate failure cases.
@@ -758,10 +759,10 @@ func testAPIPutObjectStreamSigV4Handler(obj ObjectLayer, instanceType, bucketNam
 			if err != nil {
 				t.Fatalf("Test %d: %s: Failed to fetch the copied object: <ERROR> %s", i+1, instanceType, err)
 			}
-			if objInfo.ContentEncoding == streamingContentEncoding {
+			if objInfo.ContentEncoding == "aws-chunked" {
 				t.Fatalf("Test %d: %s: ContentEncoding is set to \"aws-chunked\" which is unexpected", i+1, instanceType)
 			}
-			expectedContentEncoding := trimAwsChunkedContentEncoding(testCase.contentEncoding)
+			expectedContentEncoding := signer.TrimAwsChunkedContentEncoding(testCase.contentEncoding)
 			if expectedContentEncoding != objInfo.ContentEncoding {
 				t.Fatalf("Test %d: %s: ContentEncoding is set to \"%s\" which is unexpected, expected \"%s\"", i+1, instanceType, objInfo.ContentEncoding, expectedContentEncoding)
 			}

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
+	"github.com/minio/minio/pkg/signer"
 	"github.com/minio/minio/pkg/sys"
 	"github.com/rs/cors"
 	"golang.org/x/time/rate"
@@ -202,9 +203,9 @@ func guessIsRPCReq(req *http.Request) bool {
 }
 
 func (h redirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	aType := getRequestAuthType(r)
+	aType := signer.GetRequestAuthType(r)
 	// Re-direct only for JWT and anonymous requests from browser.
-	if aType == authTypeJWT || aType == authTypeAnonymous {
+	if aType == signer.AuthTypeJWT || aType == signer.AuthTypeAnonymous {
 		// Re-direction is handled specifically for browser requests.
 		if guessIsBrowserReq(r) && globalIsBrowserEnabled {
 			// Fetch the redirect location if any.
@@ -291,19 +292,19 @@ var amzDateHeaders = []string{
 }
 
 // parseAmzDate - parses date string into supported amz date formats.
-func parseAmzDate(amzDateStr string) (amzDate time.Time, apiErr APIErrorCode) {
+func parseAmzDate(amzDateStr string) (amzDate time.Time, apiErr SignatureErr) {
 	for _, dateFormat := range amzDateFormats {
 		amzDate, err := time.Parse(dateFormat, amzDateStr)
 		if err == nil {
 			return amzDate, ErrNone
 		}
 	}
-	return time.Time{}, ErrMalformedDate
+	return time.Time{}, signer.MalformedDate
 }
 
 // parseAmzDateHeader - parses supported amz date headers, in
 // supported amz date formats.
-func parseAmzDateHeader(req *http.Request) (time.Time, APIErrorCode) {
+func parseAmzDateHeader(req *http.Request) (time.Time, interface{}) {
 	for _, amzDateHeader := range amzDateHeaders {
 		amzDateStr := req.Header.Get(http.CanonicalHeaderKey(amzDateHeader))
 		if amzDateStr != "" {
@@ -315,8 +316,8 @@ func parseAmzDateHeader(req *http.Request) (time.Time, APIErrorCode) {
 }
 
 func (h timeValidityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	aType := getRequestAuthType(r)
-	if aType == authTypeSigned || aType == authTypeSignedV2 || aType == authTypeStreamingSigned {
+	aType := signer.GetRequestAuthType(r)
+	if aType == signer.AuthTypeSigned || aType == signer.AuthTypeSignedV2 || aType == signer.AuthTypeStreamingSigned {
 		// Verify if date headers are set, if not reject the request
 		amzDate, apiErr := parseAmzDateHeader(r)
 		if apiErr != ErrNone {

@@ -19,6 +19,8 @@ package cmd
 import (
 	"os"
 	"testing"
+
+	"github.com/minio/minio/pkg/signer"
 )
 
 func (action InitActions) String() string {
@@ -123,13 +125,13 @@ func TestPrepForInitXL(t *testing.T) {
 	}
 	// Invalid access key id.
 	accessKeyIDErr := []error{
-		errInvalidAccessKeyID, nil, nil, nil,
+		signer.InvalidAccessKeyID, nil, nil, nil,
 		nil, nil, nil, nil,
 	}
 	// Authentication error.
 	authenticationErr := []error{
 		nil, nil, nil, nil,
-		errAuthentication, nil, nil, nil,
+		signer.TokenDoesNotMatch, nil, nil, nil,
 	}
 	// Server version mismatch.
 	serverVersionMismatch := []error{

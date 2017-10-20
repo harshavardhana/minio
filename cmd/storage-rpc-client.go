@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/minio/minio/pkg/disk"
+	"github.com/minio/minio/pkg/signer"
 )
 
 type networkStorage struct {
@@ -81,10 +82,10 @@ func toStorageErr(err error) error {
 		return errCorruptedFormat
 	case errUnformattedDisk.Error():
 		return errUnformattedDisk
-	case errInvalidAccessKeyID.Error():
-		return errInvalidAccessKeyID
-	case errAuthentication.Error():
-		return errAuthentication
+	case signer.InvalidAccessKeyID.Error():
+		return signer.InvalidAccessKeyID
+	case signer.TokenDoesNotMatch.Error():
+		return signer.TokenDoesNotMatch
 	case errServerVersionMismatch.Error():
 		return errServerVersionMismatch
 	case errServerTimeMismatch.Error():

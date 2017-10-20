@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -113,6 +114,11 @@ type PostPolicyForm struct {
 
 // parsePostPolicyForm - Parse JSON policy string into typed POostPolicyForm structure.
 func parsePostPolicyForm(policy string) (ppf PostPolicyForm, e error) {
+	policyBytes, err := base64.StdEncoding.DecodeString(policy)
+	if err != nil {
+		return ppf, err
+	}
+
 	// Convert po into interfaces and
 	// perform strict type conversion using reflection.
 	var rawPolicy struct {
@@ -120,8 +126,7 @@ func parsePostPolicyForm(policy string) (ppf PostPolicyForm, e error) {
 		Conditions []interface{} `json:"conditions"`
 	}
 
-	err := json.Unmarshal([]byte(policy), &rawPolicy)
-	if err != nil {
+	if err = json.Unmarshal(policyBytes, &rawPolicy); err != nil {
 		return ppf, err
 	}
 

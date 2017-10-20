@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/minio/minio/pkg/signer"
 )
 
 // Tests heal message to be correct and properly formatted.
@@ -35,7 +37,7 @@ func TestHealMsg(t *testing.T) {
 	nilDisks := deepCopyStorageDisks(storageDisks)
 	nilDisks[5] = nil
 	authErrs := make([]error, len(storageDisks))
-	authErrs[5] = errAuthentication
+	authErrs[5] = signer.TokenDoesNotMatch
 
 	args := []string{}
 	for i := range storageDisks {

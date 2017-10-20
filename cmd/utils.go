@@ -37,6 +37,8 @@ import (
 	"github.com/pkg/profile"
 )
 
+const iso8601Format = "20060102T150405Z"
+
 // make a copy of http.Header
 func cloneHeader(h http.Header) http.Header {
 	h2 := make(http.Header, len(h))

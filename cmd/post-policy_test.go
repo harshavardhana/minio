@@ -110,6 +110,8 @@ func newPostPolicyBytesV2(bucketName, objectKey string, expiration time.Time) []
 	return []byte(retStr)
 }
 
+const yyyymmdd = "20060102"
+
 // Wrapper for calling TestPostPolicyBucketHandler tests for both XL multiple disks and single node setup.
 func TestPostPolicyBucketHandler(t *testing.T) {
 	ExecObjectLayerTest(t, testPostPolicyBucketHandler)

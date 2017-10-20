@@ -22,6 +22,7 @@ import (
 
 	"github.com/minio/minio/pkg/disk"
 	"github.com/minio/minio/pkg/errors"
+	"github.com/minio/minio/pkg/signer"
 )
 
 type testStorageRPCServer struct {
@@ -38,8 +39,8 @@ func createTestStorageServer(t *testing.T) *testStorageRPCServer {
 		t.Fatalf("unable initialize config file, %s", err)
 	}
 
-	serverCred := globalServerConfig.GetCredential()
-	token, err := authenticateNode(serverCred.AccessKey, serverCred.SecretKey)
+	creds := serverConfig.GetCredential()
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatalf("unable for JWT to generate token, %s", err)
 	}

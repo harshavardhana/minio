@@ -16,6 +16,8 @@
 
 package cmd
 
+import "github.com/minio/minio/pkg/signer"
+
 // Base login method name.  It should be used along with service name.
 const loginMethodName = ".Login"
 
@@ -29,9 +31,10 @@ func (b AuthRPCServer) Login(args *LoginRPCArgs, reply *LoginRPCReply) error {
 		return err
 	}
 
+	cred := serverConfig.GetCredential()
 	// Return an error if token is not valid.
-	if !isAuthTokenValid(args.AuthToken) {
-		return errAuthentication
+	if !signer.IsAuthTokenValid(args.AuthToken, cred.AccessKey, cred.SecretKey) {
+		return signer.TokenDoesNotMatch
 	}
 
 	return nil

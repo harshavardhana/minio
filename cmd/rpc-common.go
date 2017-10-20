@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/minio/dsync"
+	"github.com/minio/minio/pkg/signer"
 )
 
 // Allow any RPC call request time should be no more/less than 3 seconds.
@@ -46,8 +47,10 @@ func (args *AuthRPCArgs) SetAuthToken(authToken string) {
 
 // IsAuthenticated - validated whether this auth RPC args are already authenticated or not.
 func (args AuthRPCArgs) IsAuthenticated() error {
+	cred := serverConfig.GetCredential()
+
 	// Check whether the token is valid
-	if !isAuthTokenValid(args.AuthToken) {
+	if !signer.IsAuthTokenValid(args.AuthToken, cred.AccessKey, cred.SecretKey) {
 		return errInvalidToken
 	}
 

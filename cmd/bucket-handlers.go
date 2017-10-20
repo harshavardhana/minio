@@ -17,7 +17,6 @@
 package cmd
 
 import (
-	"encoding/base64"
 	"encoding/xml"
 	"io"
 	"net"
@@ -34,6 +33,7 @@ import (
 	"github.com/minio/minio-go/pkg/set"
 	"github.com/minio/minio/pkg/errors"
 	"github.com/minio/minio/pkg/hash"
+	"github.com/minio/minio/pkg/signer"
 )
 
 // http://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
@@ -516,27 +516,23 @@ func (api objectAPIHandlers) PostPolicyBucketHandler(w http.ResponseWriter, r *h
 		}
 	}
 
+	cred := serverConfig.GetCredential()
+	region := serverConfig.GetRegion()
+
 	// Verify policy signature.
-	apiErr := doesPolicySignatureMatch(formValues)
-	if apiErr != ErrNone {
-		writeErrorResponse(w, apiErr, r.URL)
+	if serr := signer.DoesPolicySignatureMatch(formValues, cred.AccessKey, cred.SecretKey, region); serr != nil {
+		writeErrorResponse(w, serr, r.URL)
 		return
 	}
 
-	policyBytes, err := base64.StdEncoding.DecodeString(formValues.Get("Policy"))
-	if err != nil {
-		writeErrorResponse(w, ErrMalformedPOSTRequest, r.URL)
-		return
-	}
-
-	postPolicyForm, err := parsePostPolicyForm(string(policyBytes))
+	postPolicyForm, err := parsePostPolicyForm(formValues.Get("Policy"))
 	if err != nil {
 		writeErrorResponse(w, ErrMalformedPOSTRequest, r.URL)
 		return
 	}
 
 	// Make sure formValues adhere to policy restrictions.
-	if apiErr = checkPostPolicy(formValues, postPolicyForm); apiErr != ErrNone {
+	if apiErr := checkPostPolicy(formValues, postPolicyForm); apiErr != ErrNone {
 		writeErrorResponse(w, apiErr, r.URL)
 		return
 	}

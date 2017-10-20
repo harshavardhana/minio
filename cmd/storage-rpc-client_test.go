@@ -26,6 +26,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/minio/minio/pkg/signer"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -182,12 +183,12 @@ func TestStorageErr(t *testing.T) {
 			err:         fmt.Errorf("%s", errFileNameTooLong.Error()),
 		},
 		{
-			expectedErr: errInvalidAccessKeyID,
-			err:         fmt.Errorf("%s", errInvalidAccessKeyID.Error()),
+			expectedErr: signer.InvalidAccessKeyID,
+			err:         fmt.Errorf("%s", signer.InvalidAccessKeyID.Error()),
 		},
 		{
-			expectedErr: errAuthentication,
-			err:         fmt.Errorf("%s", errAuthentication.Error()),
+			expectedErr: signer.TokenDoesNotMatch,
+			err:         fmt.Errorf("%s", signer.TokenDoesNotMatch.Error()),
 		},
 		{
 			expectedErr: errServerVersionMismatch,

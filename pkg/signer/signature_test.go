@@ -1,5 +1,5 @@
 /*
- * Minio Cloud Storage, (C) 2016, 2017 Minio, Inc.
+ * Minio Cloud Storage, (C) 2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,19 @@
  * limitations under the License.
  */
 
-package cmd
+package signer
 
 import (
-	"bytes"
-	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"testing"
-
-	"github.com/minio/minio/pkg/auth"
 )
 
 // Test get request auth type.
 func TestGetRequestAuthType(t *testing.T) {
 	type testCase struct {
 		req   *http.Request
-		authT authType
+		authT AuthType
 	}
 	testCases := []testCase{
 		// Test case - 1
@@ -45,12 +40,12 @@ func TestGetRequestAuthType(t *testing.T) {
 				},
 				Header: http.Header{
 					"Authorization":        []string{"AWS4-HMAC-SHA256 <cred_string>"},
-					"X-Amz-Content-Sha256": []string{streamingContentSHA256},
-					"Content-Encoding":     []string{streamingContentEncoding},
+					"X-Amz-Content-Sha256": []string{"STREAMING-AWS4-HMAC-SHA256-PAYLOAD"},
+					"Content-Encoding":     []string{"aws-chunked"},
 				},
 				Method: "PUT",
 			},
-			authT: authTypeStreamingSigned,
+			authT: AuthTypeStreamingSigned,
 		},
 		// Test case - 2
 		// Check for JWT header.
@@ -65,7 +60,7 @@ func TestGetRequestAuthType(t *testing.T) {
 					"Authorization": []string{"Bearer 12313123"},
 				},
 			},
-			authT: authTypeJWT,
+			authT: AuthTypeJWT,
 		},
 		// Test case - 3
 		// Empty authorization header.
@@ -80,7 +75,7 @@ func TestGetRequestAuthType(t *testing.T) {
 					"Authorization": []string{""},
 				},
 			},
-			authT: authTypeUnknown,
+			authT: AuthTypeUnknown,
 		},
 		// Test case - 4
 		// Check for presigned.
@@ -93,7 +88,7 @@ func TestGetRequestAuthType(t *testing.T) {
 					RawQuery: "X-Amz-Credential=EXAMPLEINVALIDEXAMPL%2Fs3%2F20160314%2Fus-east-1",
 				},
 			},
-			authT: authTypePresigned,
+			authT: AuthTypePresigned,
 		},
 		// Test case - 5
 		// Check for post policy.
@@ -109,13 +104,13 @@ func TestGetRequestAuthType(t *testing.T) {
 				},
 				Method: "POST",
 			},
-			authT: authTypePostPolicy,
+			authT: AuthTypePostPolicy,
 		},
 	}
 
 	// .. Tests all request auth type.
 	for i, testc := range testCases {
-		authT := getRequestAuthType(testc.req)
+		authT := GetRequestAuthType(testc.req)
 		if authT != testc.authT {
 			t.Errorf("Test %d: Expected %d, got %d", i+1, testc.authT, authT)
 		}
@@ -125,65 +120,65 @@ func TestGetRequestAuthType(t *testing.T) {
 // Test all s3 supported auth types.
 func TestS3SupportedAuthType(t *testing.T) {
 	type testCase struct {
-		authT authType
+		authT AuthType
 		pass  bool
 	}
 	// List of all valid and invalid test cases.
 	testCases := []testCase{
 		// Test 1 - supported s3 type anonymous.
 		{
-			authT: authTypeAnonymous,
+			authT: AuthTypeAnonymous,
 			pass:  true,
 		},
 		// Test 2 - supported s3 type presigned.
 		{
-			authT: authTypePresigned,
+			authT: AuthTypePresigned,
 			pass:  true,
 		},
 		// Test 3 - supported s3 type signed.
 		{
-			authT: authTypeSigned,
+			authT: AuthTypeSigned,
 			pass:  true,
 		},
 		// Test 4 - supported s3 type with post policy.
 		{
-			authT: authTypePostPolicy,
+			authT: AuthTypePostPolicy,
 			pass:  true,
 		},
 		// Test 5 - supported s3 type with streaming signed.
 		{
-			authT: authTypeStreamingSigned,
+			authT: AuthTypeStreamingSigned,
 			pass:  true,
 		},
 		// Test 6 - supported s3 type with signature v2.
 		{
-			authT: authTypeSignedV2,
+			authT: AuthTypeSignedV2,
 			pass:  true,
 		},
 		// Test 7 - supported s3 type with presign v2.
 		{
-			authT: authTypePresignedV2,
+			authT: AuthTypePresignedV2,
 			pass:  true,
 		},
 		// Test 8 - JWT is not supported s3 type.
 		{
-			authT: authTypeJWT,
+			authT: AuthTypeJWT,
 			pass:  false,
 		},
 		// Test 9 - unknown auth header is not supported s3 type.
 		{
-			authT: authTypeUnknown,
+			authT: AuthTypeUnknown,
 			pass:  false,
 		},
 		// Test 10 - some new auth type is not supported s3 type.
 		{
-			authT: authType(9),
+			authT: AuthType(9),
 			pass:  false,
 		},
 	}
 	// Validate all the test cases.
 	for i, tt := range testCases {
-		ok := isSupportedS3AuthType(tt.authT)
+		ok := IsSupportedS3AuthType(tt.authT)
 		if ok != tt.pass {
 			t.Errorf("Test %d:, Expected %t, got %t", i+1, tt.pass, ok)
 		}
@@ -250,7 +245,7 @@ func TestIsRequestPresignedSignatureV2(t *testing.T) {
 		q.Add(testCase.inputQueryKey, testCase.inputQueryValue)
 		inputReq.URL.RawQuery = q.Encode()
 
-		actualResult := isRequestPresignedSignatureV2(inputReq)
+		actualResult := isRequestPresignedSignV2(inputReq)
 		if testCase.expectedResult != actualResult {
 			t.Errorf("Test %d: Expected the result to `%v`, but instead got `%v`", i+1, testCase.expectedResult, actualResult)
 		}
@@ -284,77 +279,9 @@ func TestIsRequestPresignedSignatureV4(t *testing.T) {
 		q.Add(testCase.inputQueryKey, testCase.inputQueryValue)
 		inputReq.URL.RawQuery = q.Encode()
 
-		actualResult := isRequestPresignedSignatureV4(inputReq)
+		actualResult := isRequestPresignedSignV4(inputReq)
 		if testCase.expectedResult != actualResult {
 			t.Errorf("Test %d: Expected the result to `%v`, but instead got `%v`", i+1, testCase.expectedResult, actualResult)
-		}
-	}
-}
-
-// Provides a fully populated http request instance, fails otherwise.
-func mustNewRequest(method string, urlStr string, contentLength int64, body io.ReadSeeker, t *testing.T) *http.Request {
-	req, err := newTestRequest(method, urlStr, contentLength, body)
-	if err != nil {
-		t.Fatalf("Unable to initialize new http request %s", err)
-	}
-	return req
-}
-
-// This is similar to mustNewRequest but additionally the request
-// is signed with AWS Signature V4, fails if not able to do so.
-func mustNewSignedRequest(method string, urlStr string, contentLength int64, body io.ReadSeeker, t *testing.T) *http.Request {
-	req := mustNewRequest(method, urlStr, contentLength, body, t)
-	cred := globalServerConfig.GetCredential()
-	if err := signRequestV4(req, cred.AccessKey, cred.SecretKey); err != nil {
-		t.Fatalf("Unable to inititalized new signed http request %s", err)
-	}
-	return req
-}
-
-func mustNewSignedBadMD5Request(method string, urlStr string, contentLength int64, body io.ReadSeeker, t *testing.T) *http.Request {
-	req := mustNewRequest(method, urlStr, contentLength, body, t)
-	req.Header.Set("Content-Md5", "YWFhYWFhYWFhYWFhYWFhCg==")
-	cred := globalServerConfig.GetCredential()
-	if err := signRequestV4(req, cred.AccessKey, cred.SecretKey); err != nil {
-		t.Fatalf("Unable to initialized new signed http request %s", err)
-	}
-	return req
-}
-
-// Tests is requested authenticated function, tests replies for s3 errors.
-func TestIsReqAuthenticated(t *testing.T) {
-	path, err := newTestConfig(globalMinioDefaultRegion)
-	if err != nil {
-		t.Fatalf("unable initialize config file, %s", err)
-	}
-	defer os.RemoveAll(path)
-
-	creds, err := auth.CreateCredentials("myuser", "mypassword")
-	if err != nil {
-		t.Fatalf("unable create credential, %s", err)
-	}
-
-	globalServerConfig.SetCredential(creds)
-
-	// List of test cases for validating http request authentication.
-	testCases := []struct {
-		req     *http.Request
-		s3Error APIErrorCode
-	}{
-		// When request is nil, internal error is returned.
-		{nil, ErrInternalError},
-		// When request is unsigned, access denied is returned.
-		{mustNewRequest("GET", "http://127.0.0.1:9000", 0, nil, t), ErrAccessDenied},
-		// When request is properly signed, but has bad Content-MD5 header.
-		{mustNewSignedBadMD5Request("PUT", "http://127.0.0.1:9000/", 5, bytes.NewReader([]byte("hello")), t), ErrBadDigest},
-		// When request is properly signed, error is none.
-		{mustNewSignedRequest("GET", "http://127.0.0.1:9000", 0, nil, t), ErrNone},
-	}
-
-	// Validates all testcases.
-	for _, testCase := range testCases {
-		if s3Error := isReqAuthenticated(testCase.req, globalServerConfig.GetRegion()); s3Error != testCase.s3Error {
-			t.Fatalf("Unexpected s3error returned wanted %d, got %d", testCase.s3Error, s3Error)
 		}
 	}
 }

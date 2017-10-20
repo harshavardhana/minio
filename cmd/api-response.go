@@ -566,18 +566,26 @@ func writeSuccessResponseHeadersOnly(w http.ResponseWriter) {
 }
 
 // writeErrorRespone writes error headers
-func writeErrorResponse(w http.ResponseWriter, errorCode APIErrorCode, reqURL *url.URL) {
-	switch errorCode {
-	case ErrSlowDown, ErrServerNotInitialized, ErrReadQuorum, ErrWriteQuorum:
-		// Set retry-after header to indicate user-agents to retry request after 120secs.
-		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After
-		w.Header().Set("Retry-After", "120")
+func writeErrorResponse(w http.ResponseWriter, err interface{}, reqURL *url.URL) {
+	var httpStatusCode int
+	var encodedErrorResponse []byte
+	switch e := err.(type) {
+	case APIErrorCode:
+		switch e {
+		case ErrSlowDown, ErrServerNotInitialized, ErrReadQuorum, ErrWriteQuorum:
+			// Set retry-after header to indicate user-agents to retry request after 120secs.
+			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After
+			w.Header().Set("Retry-After", "120")
+		}
+		// Generate error response.
+		encodedErrorResponse = encodeResponse(getAPIErrorResponse(getAPIError(e), reqURL.Path))
+		httpStatusCode = apiError.HTTPStatusCode
+	case *SignatureErr:
+		e.Resource = reqURL.Path
+		encodedErrorResponse = encodeResponse(e)
+		httpStatusCode = e.HTTPStatusCode
 	}
-	apiError := getAPIError(errorCode)
-	// Generate error response.
-	errorResponse := getAPIErrorResponse(apiError, reqURL.Path)
-	encodedErrorResponse := encodeResponse(errorResponse)
-	writeResponse(w, apiError.HTTPStatusCode, encodedErrorResponse, mimeXML)
+	writeResponse(w, httpStatusCode, encodedErrorResponse, mimeXML)
 }
 
 func writeErrorResponseHeadersOnly(w http.ResponseWriter, errorCode APIErrorCode) {

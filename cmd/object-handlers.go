@@ -31,6 +31,7 @@ import (
 	"github.com/minio/minio/pkg/errors"
 	"github.com/minio/minio/pkg/hash"
 	"github.com/minio/minio/pkg/ioutil"
+	"github.com/minio/minio/pkg/signer"
 )
 
 // supportedHeadGetReqParams - supported request parameters for GET and HEAD presigned request.
@@ -73,7 +74,7 @@ func getSourceIPAddress(r *http.Request) string {
 //   HEAD Object: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectHEAD.html
 //   GET Object: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectGET.html
 func errAllowableObjectNotFound(bucket string, r *http.Request) APIErrorCode {
-	if getRequestAuthType(r) == authTypeAnonymous {
+	if signer.GetRequestAuthType(r) == signer.AuthTypeAnonymous {
 		// We care about the bucket as a whole, not a particular resource.
 		resource := "/" + bucket
 		sourceIP := getSourceIPAddress(r)
@@ -495,8 +496,8 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 
 	/// if Content-Length is unknown/missing, deny the request
 	size := r.ContentLength
-	rAuthType := getRequestAuthType(r)
-	if rAuthType == authTypeStreamingSigned {
+	rAuthType := signer.GetRequestAuthType(r)
+	if rAuthType == signer.AuthTypeStreamingSigned {
 		sizeStr := r.Header.Get("x-amz-decoded-content-length")
 		size, err = strconv.ParseInt(sizeStr, 10, 64)
 		if err != nil {
@@ -523,23 +524,21 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 		writeErrorResponse(w, ErrInternalError, r.URL)
 		return
 	}
-	if rAuthType == authTypeStreamingSigned {
-		if contentEncoding, ok := metadata["content-encoding"]; ok {
-			contentEncoding = trimAwsChunkedContentEncoding(contentEncoding)
-			if contentEncoding != "" {
-				// Make sure to trim and save the content-encoding
-				// parameter for a streaming signature which is set
-				// to a custom value for example: "aws-chunked,gzip".
-				metadata["content-encoding"] = contentEncoding
-			} else {
-				// Trimmed content encoding is empty when the header
-				// value is set to "aws-chunked" only.
+	if rAuthType == signer.AuthTypeStreamingSigned {
+		contentEncoding := signer.TrimAwsChunkedContentEncoding(metadata["content-encoding"])
+		if contentEncoding != "" {
+			// Make sure to trim and save the content-encoding
+			// parameter for a streaming signature which is set
+			// to a custom value for example: "aws-chunked,gzip".
+			metadata["content-encoding"] = contentEncoding
+		} else {
+			// Trimmed content encoding is empty when the header
+			// value is set to "aws-chunked" only.
 
-				// Make sure to delete the content-encoding parameter
-				// for a streaming signature which is set to value
-				// for example: "aws-chunked"
-				delete(metadata, "content-encoding")
-			}
+			// Make sure to delete the content-encoding parameter
+			// for a streaming signature which is set to value
+			// for example: "aws-chunked"
+			delete(metadata, "content-encoding")
 		}
 	}
 
@@ -554,45 +553,47 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 	var (
 		md5hex    = hex.EncodeToString(md5Bytes)
 		sha256hex = ""
-		reader    io.Reader
+		reader    = r.Body
 		s3Err     APIErrorCode
+		cred      = serverConfig.GetCredential()
+		region    = serverConfig.GetRegion()
 	)
-	reader = r.Body
+
 	switch rAuthType {
 	default:
 		// For all unknown auth types return error.
 		writeErrorResponse(w, ErrAccessDenied, r.URL)
 		return
-	case authTypeAnonymous:
+	case signer.AuthTypeAnonymous:
 		// http://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 		sourceIP := getSourceIPAddress(r)
 		if s3Err = enforceBucketPolicy(bucket, "s3:PutObject", r.URL.Path, r.Referer(), sourceIP, r.URL.Query()); s3Err != ErrNone {
 			writeErrorResponse(w, s3Err, r.URL)
 			return
 		}
-	case authTypeStreamingSigned:
+	case signer.AuthTypeStreamingSigned:
 		// Initialize stream signature verifier.
-		reader, s3Err = newSignV4ChunkedReader(r)
-		if s3Err != ErrNone {
+		reader, s3Error = signer.NewSignV4ChunkedReader(r, cred.AccessKey, cred.SecretKey, region)
+		if s3Error != nil {
 			errorIf(errSignatureMismatch, "%s", dumpRequest(r))
-			writeErrorResponse(w, s3Err, r.URL)
+			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-	case authTypeSignedV2, authTypePresignedV2:
-		s3Err = isReqAuthenticatedV2(r)
-		if s3Err != ErrNone {
+	case signer.AuthTypeSignedV2, signer.AuthTypePresignedV2:
+		s3Error = signer.IsReqAuthenticatedV2(r, cred.AccessKey, cred.SecretKey)
+		if s3Error != nil {
 			errorIf(errSignatureMismatch, "%s", dumpRequest(r))
-			writeErrorResponse(w, s3Err, r.URL)
+			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-	case authTypePresigned, authTypeSigned:
-		if s3Err = reqSignatureV4Verify(r, globalServerConfig.GetRegion()); s3Err != ErrNone {
+	case signer.AuthTypePresigned, signer.AuthTypeSigned:
+		if s3Error = signer.ReqSignatureV4Verify(r, cred.AccessKey, cred.SecretKey, region); s3Error != nil {
 			errorIf(errSignatureMismatch, "%s", dumpRequest(r))
-			writeErrorResponse(w, s3Err, r.URL)
+			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-		if !skipContentSha256Cksum(r) {
-			sha256hex = getContentSha256Cksum(r)
+		if !signer.SkipContentSha256Cksum(r) {
+			sha256hex = signer.GetContentSha256Cksum(r)
 		}
 	}
 
@@ -854,9 +855,9 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 	/// if Content-Length is unknown/missing, throw away
 	size := r.ContentLength
 
-	rAuthType := getRequestAuthType(r)
+	rAuthType := signer.GetRequestAuthType(r)
 	// For auth type streaming signature, we need to gather a different content length.
-	if rAuthType == authTypeStreamingSigned {
+	if rAuthType == signer.AuthTypeStreamingSigned {
 		sizeStr := r.Header.Get("x-amz-decoded-content-length")
 		size, err = strconv.ParseInt(sizeStr, 10, 64)
 		if err != nil {
@@ -895,6 +896,8 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 		md5hex    = hex.EncodeToString(md5Bytes)
 		sha256hex = ""
 		reader    = r.Body
+		cred      = serverConfig.GetCredential()
+		region    = serverConfig.GetRegion()
 	)
 
 	switch rAuthType {
@@ -902,38 +905,38 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 		// For all unknown auth types return error.
 		writeErrorResponse(w, ErrAccessDenied, r.URL)
 		return
-	case authTypeAnonymous:
+	case signer.AuthTypeAnonymous:
 		// http://docs.aws.amazon.com/AmazonS3/latest/dev/mpuAndPermissions.html
 		if s3Error := enforceBucketPolicy(bucket, "s3:PutObject", r.URL.Path,
 			r.Referer(), getSourceIPAddress(r), r.URL.Query()); s3Error != ErrNone {
 			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-	case authTypeStreamingSigned:
+	case signer.AuthTypeStreamingSigned:
 		// Initialize stream signature verifier.
-		var s3Error APIErrorCode
-		reader, s3Error = newSignV4ChunkedReader(r)
-		if s3Error != ErrNone {
+		var s3Error error
+		reader, s3Error = signer.NewSignV4ChunkedReader(r, cred.AccessKey, cred.SecretKey, region)
+		if s3Error != nil {
 			errorIf(errSignatureMismatch, "%s", dumpRequest(r))
 			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-	case authTypeSignedV2, authTypePresignedV2:
-		s3Error := isReqAuthenticatedV2(r)
-		if s3Error != ErrNone {
+	case signer.AuthTypeSignedV2, signer.AuthTypePresignedV2:
+		s3Error := signer.IsReqAuthenticatedV2(r, cred.AccessKey, cred.SecretKey)
+		if s3Error != nil {
 			errorIf(errSignatureMismatch, "%s", dumpRequest(r))
 			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-	case authTypePresigned, authTypeSigned:
-		if s3Error := reqSignatureV4Verify(r, globalServerConfig.GetRegion()); s3Error != ErrNone {
+	case signer.AuthTypePresigned, signer.AuthTypeSigned:
+		if s3Error := signer.ReqSignatureV4Verify(r, cred.AccessKey, cred.SecretKey, region); s3Error != nil {
 			errorIf(errSignatureMismatch, "%s", dumpRequest(r))
 			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
 
-		if !skipContentSha256Cksum(r) {
-			sha256hex = getContentSha256Cksum(r)
+		if !signer.SkipContentSha256Cksum(r) {
+			sha256hex = signer.GetContentSha256Cksum(r)
 		}
 	}
 

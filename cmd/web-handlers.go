@@ -34,11 +34,15 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2/json2"
 	"github.com/minio/minio-go/pkg/policy"
+	"github.com/minio/minio-go/pkg/s3signer"
 	"github.com/minio/minio/browser"
 	"github.com/minio/minio/pkg/auth"
 	"github.com/minio/minio/pkg/errors"
 	"github.com/minio/minio/pkg/hash"
+	"github.com/minio/minio/pkg/signer"
 )
+
+var errChangeCredNotAllowed = errors.New("Changing access key and secret key not allowed")
 
 // WebGenericArgs - empty struct for calls that don't accept arguments
 // for ex. ServerInfo, GenerateAuth
@@ -62,9 +66,12 @@ type ServerInfoRep struct {
 
 // ServerInfo - get server info.
 func (web *webAPIHandlers) ServerInfo(r *http.Request, args *WebGenericArgs, reply *ServerInfoRep) error {
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
+
 	host, err := os.Hostname()
 	if err != nil {
 		host = ""
@@ -103,9 +110,12 @@ func (web *webAPIHandlers) StorageInfo(r *http.Request, args *AuthRPCArgs, reply
 	if objectAPI == nil {
 		return toJSONError(errServerNotInitialized)
 	}
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
+
 	reply.StorageInfo = objectAPI.StorageInfo()
 	reply.UIVersion = browser.UIVersion
 	return nil
@@ -122,8 +132,10 @@ func (web *webAPIHandlers) MakeBucket(r *http.Request, args *MakeBucketArgs, rep
 	if objectAPI == nil {
 		return toJSONError(errServerNotInitialized)
 	}
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	// Check if bucket is a reserved bucket name or invalid.
@@ -195,7 +207,8 @@ func (web *webAPIHandlers) ListBuckets(r *http.Request, args *WebGenericArgs, re
 	if objectAPI == nil {
 		return toJSONError(errServerNotInitialized)
 	}
-	authErr := webRequestAuthenticate(r)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
 	if authErr != nil {
 		return toJSONError(authErr)
 	}
@@ -251,9 +264,10 @@ func (web *webAPIHandlers) ListObjects(r *http.Request, args *ListObjectsArgs, r
 	prefix := args.Prefix + "test" // To test if GetObject/PutObject with the specified prefix is allowed.
 	readable := isBucketActionAllowed("s3:GetObject", args.BucketName, prefix)
 	writable := isBucketActionAllowed("s3:PutObject", args.BucketName, prefix)
-	authErr := webRequestAuthenticate(r)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
 	switch {
-	case authErr == errAuthentication:
+	case authErr == signer.TokenDoesNotMatch:
 		return toJSONError(authErr)
 	case authErr == nil:
 		break
@@ -266,7 +280,7 @@ func (web *webAPIHandlers) ListObjects(r *http.Request, args *ListObjectsArgs, r
 		reply.Writable = true
 		return nil
 	default:
-		return errAuthentication
+		return signer.TokenDoesNotMatch
 	}
 	lo, err := objectAPI.ListObjects(args.BucketName, args.Prefix, args.Marker, slashSeparator, 1000)
 	if err != nil {
@@ -312,8 +326,10 @@ func (web *webAPIHandlers) RemoveObject(r *http.Request, args *RemoveObjectArgs,
 	if objectAPI == nil {
 		return toJSONError(errServerNotInitialized)
 	}
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	if args.BucketName == "" || len(args.Objects) == 0 {
@@ -373,9 +389,16 @@ type LoginRep struct {
 	UIVersion string `json:"uiVersion"`
 }
 
+const (
+	// Default JWT token for web handlers is one day.
+	defaultJWTExpiry = 24 * time.Hour
+	// URL JWT token expiry is one minute (might be exposed).
+	defaultURLJWTExpiry = time.Minute
+)
+
 // Login - user login handler.
 func (web *webAPIHandlers) Login(r *http.Request, args *LoginArgs, reply *LoginRep) error {
-	token, err := authenticateWeb(args.Username, args.Password)
+	token, err := signer.GetAuthToken(args.Username, args.Password, defaultJWTExpiry)
 	if err != nil {
 		// Make sure to log errors related to browser login,
 		// for security and auditing reasons.
@@ -396,10 +419,13 @@ type GenerateAuthReply struct {
 }
 
 func (web webAPIHandlers) GenerateAuth(r *http.Request, args *WebGenericArgs, reply *GenerateAuthReply) error {
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
-	cred := auth.MustGetNewCredentials()
+
+	cred = auth.MustGetNewCredentials()
 	reply.AccessKey = cred.AccessKey
 	reply.SecretKey = cred.SecretKey
 	reply.UIVersion = browser.UIVersion
@@ -421,8 +447,10 @@ type SetAuthReply struct {
 
 // SetAuth - Set accessKey and secretKey credentials.
 func (web *webAPIHandlers) SetAuth(r *http.Request, args *SetAuthArgs, reply *SetAuthReply) error {
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	// If creds are set through ENV disallow changing credentials.
@@ -467,7 +495,7 @@ func (web *webAPIHandlers) SetAuth(r *http.Request, args *SetAuthArgs, reply *Se
 	}
 
 	// As we have updated access/secret key, generate new auth token.
-	token, err := authenticateWeb(creds.AccessKey, creds.SecretKey)
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultJWTExpiry)
 	if err != nil {
 		// Did we have peer errors?
 		if len(errsMap) > 0 {
@@ -494,10 +522,13 @@ type GetAuthReply struct {
 
 // GetAuth - return accessKey and secretKey credentials.
 func (web *webAPIHandlers) GetAuth(r *http.Request, args *WebGenericArgs, reply *GetAuthReply) error {
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := globalServerConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
-	creds := globalServerConfig.GetCredential()
+
+	creds := serverConfig.GetCredential()
 	reply.AccessKey = creds.AccessKey
 	reply.SecretKey = creds.SecretKey
 	reply.UIVersion = browser.UIVersion
@@ -512,15 +543,10 @@ type URLTokenReply struct {
 
 // CreateURLToken creates a URL token (short-lived) for GET requests.
 func (web *webAPIHandlers) CreateURLToken(r *http.Request, args *WebGenericArgs, reply *URLTokenReply) error {
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
-	}
-
-	creds := globalServerConfig.GetCredential()
-
-	token, err := authenticateURL(creds.AccessKey, creds.SecretKey)
-	if err != nil {
-		return toJSONError(err)
+	cred := globalServerConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	reply.Token = token
@@ -540,13 +566,14 @@ func (web *webAPIHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 	bucket := vars["bucket"]
 	object := vars["object"]
 
-	authErr := webRequestAuthenticate(r)
-	if authErr == errAuthentication {
-		writeWebErrorResponse(w, errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr == signer.TokenDoesNotMatch {
+		writeWebErrorResponse(w, signer.TokenDoesNotMatch)
 		return
 	}
 	if authErr != nil && !isBucketActionAllowed("s3:PutObject", bucket, object) {
-		writeWebErrorResponse(w, errAuthentication)
+		writeWebErrorResponse(w, signer.TokenDoesNotMatch)
 		return
 	}
 
@@ -607,8 +634,9 @@ func (web *webAPIHandlers) Download(w http.ResponseWriter, r *http.Request) {
 	object := vars["object"]
 	token := r.URL.Query().Get("token")
 
-	if !isAuthTokenValid(token) && !isBucketActionAllowed("s3:GetObject", bucket, object) {
-		writeWebErrorResponse(w, errAuthentication)
+	cred := serverConfig.GetCredential()
+	if !signer.IsAuthTokenValid(token, cred.AccessKey, cred.SecretKey) && !isBucketActionAllowed("s3:GetObject", bucket, object) {
+		writeWebErrorResponse(w, signer.TokenDoesNotMatch)
 		return
 	}
 
@@ -657,10 +685,11 @@ func (web *webAPIHandlers) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := r.URL.Query().Get("token")
-	if !isAuthTokenValid(token) {
+	cred := serverConfig.GetCredential()
+	if !signer.IsAuthTokenValid(token, cred.AccessKey, cred.SecretKey) {
 		for _, object := range args.Objects {
 			if !isBucketActionAllowed("s3:GetObject", args.BucketName, pathJoin(args.Prefix, object)) {
-				writeWebErrorResponse(w, errAuthentication)
+				writeWebErrorResponse(w, signer.TokenDoesNotMatch)
 				return
 			}
 		}
@@ -772,8 +801,10 @@ func (web *webAPIHandlers) GetBucketPolicy(r *http.Request, args *GetBucketPolic
 		return toJSONError(errServerNotInitialized)
 	}
 
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	var policyInfo, err = getBucketAccessPolicy(objectAPI, args.BucketName)
@@ -814,8 +845,10 @@ func (web *webAPIHandlers) ListAllBucketPolicies(r *http.Request, args *ListAllB
 		return toJSONError(errServerNotInitialized)
 	}
 
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	var policyInfo, err = getBucketAccessPolicy(objectAPI, args.BucketName)
@@ -851,8 +884,10 @@ func (web *webAPIHandlers) SetBucketPolicy(r *http.Request, args *SetBucketPolic
 		return toJSONError(errServerNotInitialized)
 	}
 
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	bucketP := policy.BucketPolicy(args.Policy)
@@ -939,8 +974,10 @@ type PresignedGetRep struct {
 
 // PresignedGET - returns presigned-Get url.
 func (web *webAPIHandlers) PresignedGet(r *http.Request, args *PresignedGetArgs, reply *PresignedGetRep) error {
-	if !isHTTPRequestValid(r) {
-		return toJSONError(errAuthentication)
+	cred := serverConfig.GetCredential()
+	authErr := signer.WebRequestAuthenticate(r, cred.AccessKey, cred.SecretKey)
+	if authErr != nil {
+		return toJSONError(authErr)
 	}
 
 	if args.BucketName == "" || args.ObjectName == "" {
@@ -949,7 +986,11 @@ func (web *webAPIHandlers) PresignedGet(r *http.Request, args *PresignedGetArgs,
 		}
 	}
 	reply.UIVersion = browser.UIVersion
-	reply.URL = presignedGet(args.HostName, args.BucketName, args.ObjectName, args.Expiry)
+	var err error
+	reply.URL, err = presignedGet(args.HostName, args.BucketName, args.ObjectName, args.Expiry)
+	if err != nil {
+		return toJSONError(err)
+	}
 	return nil
 }
 
@@ -958,37 +999,14 @@ func presignedGet(host, bucket, object string, expiry int64) string {
 	cred := globalServerConfig.GetCredential()
 	region := globalServerConfig.GetRegion()
 
-	accessKey := cred.AccessKey
-	secretKey := cred.SecretKey
-
-	date := UTCNow()
-	dateStr := date.Format(iso8601Format)
-	credential := fmt.Sprintf("%s/%s", accessKey, getScope(date, region))
-
-	var expiryStr = "604800" // Default set to be expire in 7days.
-	if expiry < 604800 && expiry > 0 {
-		expiryStr = strconv.FormatInt(expiry, 10)
+	// Initialize a new HTTP request for the method.
+	req, err := http.NewRequest("GET", host, nil)
+	if err != nil {
+		return "", err
 	}
-	query := strings.Join([]string{
-		"X-Amz-Algorithm=" + signV4Algorithm,
-		"X-Amz-Credential=" + strings.Replace(credential, "/", "%2F", -1),
-		"X-Amz-Date=" + dateStr,
-		"X-Amz-Expires=" + expiryStr,
-		"X-Amz-SignedHeaders=host",
-	}, "&")
 
-	path := "/" + path.Join(bucket, object)
-
-	// "host" is the only header required to be signed for Presigned URLs.
-	extractedSignedHeaders := make(http.Header)
-	extractedSignedHeaders.Set("host", host)
-	canonicalRequest := getCanonicalRequest(extractedSignedHeaders, unsignedPayload, query, path, "GET")
-	stringToSign := getStringToSign(canonicalRequest, date, getScope(date, region))
-	signingKey := getSigningKey(secretKey, date, region)
-	signature := getSignature(signingKey, stringToSign)
-
-	// Construct the final presigned URL.
-	return host + getURLEncodedName(path) + "?" + query + "&" + "X-Amz-Signature=" + signature
+	req = s3signer.PreSignV4(*req, cred.AccessKey, cred.SecretKey, "", region, expiry)
+	return req.URL.String(), nil
 }
 
 // toJSONError converts regular errors into more user friendly
@@ -1035,7 +1053,7 @@ func toJSONError(err error, params ...string) (jerr *json2.Error) {
 // toWebAPIError - convert into error into APIError.
 func toWebAPIError(err error) APIError {
 	err = errors.Cause(err)
-	if err == errAuthentication {
+	if err == signer.TokenDoesNotMatch {
 		return APIError{
 			Code:           "AccessDenied",
 			HTTPStatusCode: http.StatusForbidden,
@@ -1059,7 +1077,7 @@ func toWebAPIError(err error) APIError {
 			HTTPStatusCode: http.StatusForbidden,
 			Description:    err.Error(),
 		}
-	} else if err == errInvalidAccessKeyID {
+	} else if err == signer.InvalidAccessKeyID {
 		return APIError{
 			Code:           "AccessDenied",
 			HTTPStatusCode: http.StatusForbidden,

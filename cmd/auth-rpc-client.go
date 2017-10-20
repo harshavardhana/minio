@@ -20,6 +20,8 @@ import (
 	"net/rpc"
 	"sync"
 	"time"
+
+	"github.com/minio/minio/pkg/signer"
 )
 
 // Attempt to retry only this many number of times before
@@ -78,6 +80,9 @@ func newAuthRPCClient(config authConfig) *AuthRPCClient {
 	}
 }
 
+// Inter-node JWT token expiry is 100 years approx.
+const defaultNodeJWTExpiry = 100 * 365 * 24 * time.Hour
+
 // Login a JWT based authentication is performed with rpc server.
 func (authClient *AuthRPCClient) Login() (err error) {
 	// Login should be attempted one at a time.
@@ -99,10 +104,11 @@ func (authClient *AuthRPCClient) Login() (err error) {
 
 	// Attempt to login if not logged in already.
 	if authClient.authToken == "" {
-		authClient.authToken, err = authenticateNode(authClient.config.accessKey, authClient.config.secretKey)
+		authClient.authToken, err = signer.GetAuthToken(authClient.config.accessKey, authClient.config.secretKey, defaultNodeJWTExpiry)
 		if err != nil {
 			return err
 		}
+
 		// Login to authenticate your token.
 		var (
 			loginMethod = authClient.config.serviceName + loginMethodName

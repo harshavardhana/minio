@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/minio/dsync"
+	"github.com/minio/minio/pkg/signer"
 )
 
 // Helper function to test equality of locks (without taking timing info into account)
@@ -57,8 +58,8 @@ func createLockTestServer(t *testing.T) (string, *lockServer, string) {
 			lockMap:         make(map[string][]lockRequesterInfo),
 		},
 	}
-	creds := globalServerConfig.GetCredential()
-	token, err := authenticateNode(creds.AccessKey, creds.SecretKey)
+	creds := serverConfig.GetCredential()
+	token, err := signer.GetAuthToken(creds.AccessKey, creds.SecretKey, defaultNodeJWTExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}

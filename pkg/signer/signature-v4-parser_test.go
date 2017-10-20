@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package cmd
+package signer
 
 import (
 	"net/url"
@@ -81,51 +81,51 @@ func validateCredentialfields(t *testing.T, testNum int, expectedCredentials cre
 // A valid format of creadential should be of the following format.
 // Credential = accessKey + "/"+ scope
 // where scope = string.Join([]string{  currTime.Format(yyyymmdd),
-// 			globalMinioDefaultRegion,
+// 			"us-east-1",
 //               	"s3",
 //		        "aws4_request",
 //                       },"/")
 func TestParseCredentialHeader(t *testing.T) {
 
-	sampleTimeStr := UTCNow().Format(yyyymmdd)
+	sampleTimeStr := time.Now().UTC().Format(yyyymmdd)
 
 	testCases := []struct {
 		inputCredentialStr  string
 		expectedCredentials credentialHeader
-		expectedErrCode     APIErrorCode
+		expectedErrCode     error
 	}{
 		// Test Case - 1.
 		// Test case with no '=' in te inputCredentialStr.
 		{
 			inputCredentialStr:  "Credential",
 			expectedCredentials: credentialHeader{},
-			expectedErrCode:     ErrMissingFields,
+			expectedErrCode:     MissingFields,
 		},
 		// Test Case - 2.
 		// Test case with no "Credential" string in te inputCredentialStr.
 		{
 			inputCredentialStr:  "Cred=",
 			expectedCredentials: credentialHeader{},
-			expectedErrCode:     ErrMissingCredTag,
+			expectedErrCode:     MissingCredTag,
 		},
 		// Test Case - 3.
 		// Test case with malformed credentials.
 		{
 			inputCredentialStr:  "Credential=abc",
 			expectedCredentials: credentialHeader{},
-			expectedErrCode:     ErrCredMalformed,
+			expectedErrCode:     CredMalformed,
 		},
 		// Test Case - 4.
 		// Test case with AccessKey of length 4.
 		{
 			inputCredentialStr: generateCredentialStr(
 				"^#@.",
-				UTCNow().Format(yyyymmdd),
+				time.Now().UTC().Format(yyyymmdd),
 				"ABCD",
 				"ABCD",
 				"ABCD"),
 			expectedCredentials: credentialHeader{},
-			expectedErrCode:     ErrInvalidAccessKeyID,
+			expectedErrCode:     InvalidAccessKeyID,
 		},
 		// Test Case - 5.
 		// Test case with invalid date format date.
@@ -133,12 +133,12 @@ func TestParseCredentialHeader(t *testing.T) {
 		{
 			inputCredentialStr: generateCredentialStr(
 				"Z7IXGOO6BZ0REAN1Q26I",
-				UTCNow().String(),
+				time.Now().UTC().String(),
 				"ABCD",
 				"ABCD",
 				"ABCD"),
 			expectedCredentials: credentialHeader{},
-			expectedErrCode:     ErrMalformedCredentialDate,
+			expectedErrCode:     MalformedCredentialDate,
 		},
 		// Test Case - 6.
 		// Test case with invalid service.
@@ -146,12 +146,12 @@ func TestParseCredentialHeader(t *testing.T) {
 		{
 			inputCredentialStr: generateCredentialStr(
 				"Z7IXGOO6BZ0REAN1Q26I",
-				UTCNow().Format(yyyymmdd),
+				time.Now().UTC().Format(yyyymmdd),
 				"us-west-1",
 				"ABCD",
 				"ABCD"),
 			expectedCredentials: credentialHeader{},
-			expectedErrCode:     ErrInvalidService,
+			expectedErrCode:     InvalidService,
 		},
 		// Test Case - 7.
 		// Test case with invalid request version.
@@ -159,12 +159,12 @@ func TestParseCredentialHeader(t *testing.T) {
 		{
 			inputCredentialStr: generateCredentialStr(
 				"Z7IXGOO6BZ0REAN1Q26I",
-				UTCNow().Format(yyyymmdd),
+				time.Now().UTC().Format(yyyymmdd),
 				"us-west-1",
 				"s3",
 				"ABCD"),
 			expectedCredentials: credentialHeader{},
-			expectedErrCode:     ErrInvalidRequestVersion,
+			expectedErrCode:     InvalidRequestVersion,
 		},
 		// Test Case - 8.
 		// Test case with right inputs. Expected to return a valid CredentialHeader.
@@ -183,17 +183,17 @@ func TestParseCredentialHeader(t *testing.T) {
 				"us-west-1",
 				"s3",
 				"aws4_request"),
-			expectedErrCode: ErrNone,
+			expectedErrCode: nil,
 		},
 	}
 
 	for i, testCase := range testCases {
-		actualCredential, actualErrCode := parseCredentialHeader(testCase.inputCredentialStr)
+		actualCredential, actualErrCode := parseCredentialHeader(testCase.inputCredentialStr, "Z7IXGOO6BZ0REAN1Q26I")
 		// validating the credential fields.
 		if testCase.expectedErrCode != actualErrCode {
-			t.Fatalf("Test %d: Expected the APIErrCode to be %s, got %s", i+1, errorCodeResponse[testCase.expectedErrCode].Code, errorCodeResponse[actualErrCode].Code)
+			t.Fatalf("Test %d: Expected the APIErrCode to be %s, got %s", i+1, testCase.expectedErrCode, actualErrCode)
 		}
-		if actualErrCode == ErrNone {
+		if actualErrCode == nil {
 			validateCredentialfields(t, i+1, testCase.expectedCredentials, actualCredential)
 		}
 	}
@@ -204,7 +204,7 @@ func TestParseSignature(t *testing.T) {
 	testCases := []struct {
 		inputSignElement string
 		expectedSignStr  string
-		expectedErrCode  APIErrorCode
+		expectedErrCode  error
 	}{
 		// Test case - 1.
 		// SignElemenet doesn't have 2 parts on an attempt to split at '='.
@@ -212,7 +212,7 @@ func TestParseSignature(t *testing.T) {
 		{
 			inputSignElement: "Signature",
 			expectedSignStr:  "",
-			expectedErrCode:  ErrMissingFields,
+			expectedErrCode:  MissingFields,
 		},
 		// Test case - 2.
 		// SignElement does have 2 parts but doesn't have valid signature value.
@@ -220,21 +220,21 @@ func TestParseSignature(t *testing.T) {
 		{
 			inputSignElement: "Signature=",
 			expectedSignStr:  "",
-			expectedErrCode:  ErrMissingFields,
+			expectedErrCode:  MissingFields,
 		},
 		// Test case - 3.
 		// SignElemenet with missing "SignatureTag",ErrMissingSignTag expected.
 		{
 			inputSignElement: "Sign=",
 			expectedSignStr:  "",
-			expectedErrCode:  ErrMissingSignTag,
+			expectedErrCode:  MissingSignTag,
 		},
 		// Test case - 4.
 		// Test case with valid inputs.
 		{
 			inputSignElement: "Signature=abcd",
 			expectedSignStr:  "abcd",
-			expectedErrCode:  ErrNone,
+			expectedErrCode:  nil,
 		},
 	}
 	for i, testCase := range testCases {
@@ -242,7 +242,7 @@ func TestParseSignature(t *testing.T) {
 		if testCase.expectedErrCode != actualErrCode {
 			t.Fatalf("Test %d: Expected the APIErrCode to be %d, got %d", i+1, testCase.expectedErrCode, actualErrCode)
 		}
-		if actualErrCode == ErrNone {
+		if actualErrCode == nil {
 			if testCase.expectedSignStr != actualSignStr {
 				t.Errorf("Test %d: Expected the result to be \"%s\", but got \"%s\". ", i+1, testCase.expectedSignStr, actualSignStr)
 
@@ -257,7 +257,7 @@ func TestParseSignedHeaders(t *testing.T) {
 	testCases := []struct {
 		inputSignElement      string
 		expectedSignedHeaders []string
-		expectedErrCode       APIErrorCode
+		expectedErrCode       error
 	}{
 		// Test case - 1.
 		// SignElemenet doesn't have 2 parts on an attempt to split at '='.
@@ -265,21 +265,21 @@ func TestParseSignedHeaders(t *testing.T) {
 		{
 			inputSignElement:      "SignedHeaders",
 			expectedSignedHeaders: nil,
-			expectedErrCode:       ErrMissingFields,
+			expectedErrCode:       MissingFields,
 		},
 		// Test case - 2.
 		// SignElemenet with missing "SigHeaderTag",ErrMissingSignHeadersTag expected.
 		{
 			inputSignElement:      "Sign=",
 			expectedSignedHeaders: nil,
-			expectedErrCode:       ErrMissingSignHeadersTag,
+			expectedErrCode:       MissingSignHeadersTag,
 		},
 		// Test case - 3.
 		// Test case with valid inputs.
 		{
 			inputSignElement:      "SignedHeaders=host;x-amz-content-sha256;x-amz-date",
 			expectedSignedHeaders: []string{"host", "x-amz-content-sha256", "x-amz-date"},
-			expectedErrCode:       ErrNone,
+			expectedErrCode:       nil,
 		},
 	}
 
@@ -288,7 +288,7 @@ func TestParseSignedHeaders(t *testing.T) {
 		if testCase.expectedErrCode != actualErrCode {
 			t.Errorf("Test %d: Expected the APIErrCode to be %d, got %d", i+1, testCase.expectedErrCode, actualErrCode)
 		}
-		if actualErrCode == ErrNone {
+		if actualErrCode == nil {
 			if strings.Join(testCase.expectedSignedHeaders, ",") != strings.Join(actualSignedHeaders, ",") {
 				t.Errorf("Test %d: Expected the result to be \"%v\", but got \"%v\". ", i+1, testCase.expectedSignedHeaders, actualSignedHeaders)
 
@@ -300,18 +300,18 @@ func TestParseSignedHeaders(t *testing.T) {
 
 // TestParseSignV4 - Tests Parsing of v4 signature form the authorization string.
 func TestParseSignV4(t *testing.T) {
-	sampleTimeStr := UTCNow().Format(yyyymmdd)
+	sampleTimeStr := time.Now().UTC().Format(yyyymmdd)
 	testCases := []struct {
 		inputV4AuthStr    string
 		expectedAuthField signValues
-		expectedErrCode   APIErrorCode
+		expectedErrCode   error
 	}{
 		// Test case - 1.
 		// Test case with empty auth string.
 		{
 			inputV4AuthStr:    "",
 			expectedAuthField: signValues{},
-			expectedErrCode:   ErrAuthHeaderEmpty,
+			expectedErrCode:   AuthHeaderEmpty,
 		},
 		// Test case - 2.
 		// Test case with no sign v4 Algorithm prefix.
@@ -319,7 +319,7 @@ func TestParseSignV4(t *testing.T) {
 		{
 			inputV4AuthStr:    "no-singv4AlgorithmPrefix",
 			expectedAuthField: signValues{},
-			expectedErrCode:   ErrSignatureVersionNotSupported,
+			expectedErrCode:   SignatureVersionNotSupported,
 		},
 		// Test case - 3.
 		// Test case with missing fields.
@@ -327,14 +327,14 @@ func TestParseSignV4(t *testing.T) {
 		{
 			inputV4AuthStr:    signV4Algorithm,
 			expectedAuthField: signValues{},
-			expectedErrCode:   ErrMissingFields,
+			expectedErrCode:   MissingFields,
 		},
 		// Test case - 4.
 		// Test case with invalid credential field.
 		{
 			inputV4AuthStr:    signV4Algorithm + " Cred=,a,b",
 			expectedAuthField: signValues{},
-			expectedErrCode:   ErrMissingCredTag,
+			expectedErrCode:   MissingCredTag,
 		},
 		// Test case - 5.
 		// Auth field with missing "SigHeaderTag",ErrMissingSignHeadersTag expected.
@@ -356,7 +356,7 @@ func TestParseSignV4(t *testing.T) {
 				}, ","),
 
 			expectedAuthField: signValues{},
-			expectedErrCode:   ErrMissingSignHeadersTag,
+			expectedErrCode:   MissingSignHeadersTag,
 		},
 		// Test case - 6.
 		// Auth string with missing "SignatureTag",ErrMissingSignTag expected.
@@ -380,7 +380,7 @@ func TestParseSignV4(t *testing.T) {
 				}, ","),
 
 			expectedAuthField: signValues{},
-			expectedErrCode:   ErrMissingSignTag,
+			expectedErrCode:   MissingSignTag,
 		},
 		// Test case - 7.
 		{
@@ -411,18 +411,18 @@ func TestParseSignV4(t *testing.T) {
 				SignedHeaders: []string{"host", "x-amz-content-sha256", "x-amz-date"},
 				Signature:     "abcd",
 			},
-			expectedErrCode: ErrNone,
+			expectedErrCode: nil,
 		},
 	}
 
 	for i, testCase := range testCases {
-		parsedAuthField, actualErrCode := parseSignV4(testCase.inputV4AuthStr)
+		parsedAuthField, actualErrCode := parseSignV4(testCase.inputV4AuthStr, "Z7IXGOO6BZ0REAN1Q26I")
 
 		if testCase.expectedErrCode != actualErrCode {
 			t.Fatalf("Test %d: Expected the APIErrCode to be %d, got %d", i+1, testCase.expectedErrCode, actualErrCode)
 		}
 
-		if actualErrCode == ErrNone {
+		if actualErrCode == nil {
 			// validating the extracted/parsed credential fields.
 			validateCredentialfields(t, i+1, testCase.expectedAuthField.Credential, parsedAuthField.Credential)
 
@@ -445,7 +445,7 @@ func TestParseSignV4(t *testing.T) {
 func TestDoesV4PresignParamsExist(t *testing.T) {
 	testCases := []struct {
 		inputQueryKeyVals []string
-		expectedErrCode   APIErrorCode
+		expectedErrCode   error
 	}{
 		// Test case - 1.
 		// contains all query param keys which are necessary for v4 presign request.
@@ -458,7 +458,7 @@ func TestDoesV4PresignParamsExist(t *testing.T) {
 				"X-Amz-SignedHeaders", "",
 				"X-Amz-Expires", "",
 			},
-			expectedErrCode: ErrNone,
+			expectedErrCode: nil,
 		},
 		// Test case - 2.
 		// missing 	"X-Amz-Algorithm" in tdhe query param.
@@ -471,7 +471,7 @@ func TestDoesV4PresignParamsExist(t *testing.T) {
 				"X-Amz-SignedHeaders", "",
 				"X-Amz-Expires", "",
 			},
-			expectedErrCode: ErrInvalidQueryParams,
+			expectedErrCode: InvalidQueryParams,
 		},
 		// Test case - 3.
 		// missing "X-Amz-Credential" in the query param.
@@ -483,7 +483,7 @@ func TestDoesV4PresignParamsExist(t *testing.T) {
 				"X-Amz-SignedHeaders", "",
 				"X-Amz-Expires", "",
 			},
-			expectedErrCode: ErrInvalidQueryParams,
+			expectedErrCode: InvalidQueryParams,
 		},
 		// Test case - 4.
 		// missing "X-Amz-Signature" in the query param.
@@ -495,7 +495,7 @@ func TestDoesV4PresignParamsExist(t *testing.T) {
 				"X-Amz-SignedHeaders", "",
 				"X-Amz-Expires", "",
 			},
-			expectedErrCode: ErrInvalidQueryParams,
+			expectedErrCode: InvalidQueryParams,
 		},
 		// Test case - 5.
 		// missing "X-Amz-Date" in the query param.
@@ -507,7 +507,7 @@ func TestDoesV4PresignParamsExist(t *testing.T) {
 				"X-Amz-SignedHeaders", "",
 				"X-Amz-Expires", "",
 			},
-			expectedErrCode: ErrInvalidQueryParams,
+			expectedErrCode: InvalidQueryParams,
 		},
 		// Test case - 6.
 		// missing "X-Amz-SignedHeaders" in the query param.
@@ -519,7 +519,7 @@ func TestDoesV4PresignParamsExist(t *testing.T) {
 				"X-Amz-Date", "",
 				"X-Amz-Expires", "",
 			},
-			expectedErrCode: ErrInvalidQueryParams,
+			expectedErrCode: InvalidQueryParams,
 		},
 		// Test case - 7.
 		// missing "X-Amz-Expires" in the query param.
@@ -531,7 +531,7 @@ func TestDoesV4PresignParamsExist(t *testing.T) {
 				"X-Amz-Date", "",
 				"X-Amz-SignedHeaders", "",
 			},
-			expectedErrCode: ErrInvalidQueryParams,
+			expectedErrCode: InvalidQueryParams,
 		},
 	}
 
@@ -559,14 +559,14 @@ func TestParsePreSignV4(t *testing.T) {
 		return strconv.Itoa(expires)
 	}
 	// used in expected preSignValues, preSignValues.Date is of type time.Time .
-	queryTime := UTCNow()
+	queryTime := time.Now().UTC()
 
-	sampleTimeStr := UTCNow().Format(yyyymmdd)
+	sampleTimeStr := time.Now().UTC().Format(yyyymmdd)
 
 	testCases := []struct {
 		inputQueryKeyVals     []string
 		expectedPreSignValues preSignValues
-		expectedErrCode       APIErrorCode
+		expectedErrCode       error
 	}{
 		// Test case - 1.
 		// A Valid v4 presign URL requires the following params to be in the query.
@@ -581,7 +581,7 @@ func TestParsePreSignV4(t *testing.T) {
 				"X-Amz-Expires", "",
 			},
 			expectedPreSignValues: preSignValues{},
-			expectedErrCode:       ErrInvalidQueryParams,
+			expectedErrCode:       InvalidQueryParams,
 		},
 		// Test case - 2.
 		// Test case with invalid  "X-Amz-Algorithm" query value.
@@ -597,7 +597,7 @@ func TestParsePreSignV4(t *testing.T) {
 				"X-Amz-Expires", "",
 			},
 			expectedPreSignValues: preSignValues{},
-			expectedErrCode:       ErrInvalidQuerySignatureAlgo,
+			expectedErrCode:       InvalidQuerySignatureAlgo,
 		},
 		// Test case - 3.
 		// Test case with valid "X-Amz-Algorithm" query value, but invalid  "X-Amz-Credential" header.
@@ -614,7 +614,7 @@ func TestParsePreSignV4(t *testing.T) {
 				"X-Amz-Expires", "",
 			},
 			expectedPreSignValues: preSignValues{},
-			expectedErrCode:       ErrCredMalformed,
+			expectedErrCode:       CredMalformed,
 		},
 
 		// Test case - 4.
@@ -638,7 +638,7 @@ func TestParsePreSignV4(t *testing.T) {
 				"X-Amz-Signature", "",
 			},
 			expectedPreSignValues: preSignValues{},
-			expectedErrCode:       ErrMalformedPresignedDate,
+			expectedErrCode:       MalformedPresignedDate,
 		},
 		// Test case - 5.
 		// Test case with valid "X-Amz-Algorithm", "X-Amz-Credential", "X-Amz-Date" query value.
@@ -655,13 +655,13 @@ func TestParsePreSignV4(t *testing.T) {
 					"s3",
 					"aws4_request"),
 				// valid "X-Amz-Date" query.
-				"X-Amz-Date", UTCNow().Format(iso8601Format),
+				"X-Amz-Date", time.Now().UTC().Format(iso8601Format),
 				"X-Amz-Expires", "MalformedExpiry",
 				"X-Amz-SignedHeaders", "",
 				"X-Amz-Signature", "",
 			},
 			expectedPreSignValues: preSignValues{},
-			expectedErrCode:       ErrMalformedExpires,
+			expectedErrCode:       MalformedExpires,
 		},
 		// Test case - 6.
 		// Test case with negative X-Amz-Expires header.
@@ -683,7 +683,7 @@ func TestParsePreSignV4(t *testing.T) {
 				"X-Amz-SignedHeaders", "host;x-amz-content-sha256;x-amz-date",
 			},
 			expectedPreSignValues: preSignValues{},
-			expectedErrCode:       ErrNegativeExpires,
+			expectedErrCode:       NegativeExpires,
 		},
 		// Test case - 7.
 		// Test case with empty X-Amz-SignedHeaders.
@@ -705,7 +705,7 @@ func TestParsePreSignV4(t *testing.T) {
 				"X-Amz-SignedHeaders", "",
 			},
 			expectedPreSignValues: preSignValues{},
-			expectedErrCode:       ErrMissingFields,
+			expectedErrCode:       MissingFields,
 		},
 		// Test case - 8.
 		// Test case with valid "X-Amz-Algorithm", "X-Amz-Credential", "X-Amz-Date" query value.
@@ -748,7 +748,7 @@ func TestParsePreSignV4(t *testing.T) {
 				// Expires.
 				100 * time.Second,
 			},
-			expectedErrCode: ErrNone,
+			expectedErrCode: nil,
 		},
 
 		// Test case - 9.
@@ -783,11 +783,11 @@ func TestParsePreSignV4(t *testing.T) {
 			inputQuery.Set(testCase.inputQueryKeyVals[j], testCase.inputQueryKeyVals[j+1])
 		}
 		// call the function under test.
-		parsedPreSign, actualErrCode := parsePreSignV4(inputQuery)
+		parsedPreSign, actualErrCode := parsePreSignV4(inputQuery, "Z7IXGOO6BZ0REAN1Q26I")
 		if testCase.expectedErrCode != actualErrCode {
 			t.Fatalf("Test %d: Expected the APIErrCode to be %d, got %d", i+1, testCase.expectedErrCode, actualErrCode)
 		}
-		if actualErrCode == ErrNone {
+		if actualErrCode == nil {
 			// validating credentials.
 			validateCredentialfields(t, i+1, testCase.expectedPreSignValues.Credential, parsedPreSign.Credential)
 			// validating signed headers.

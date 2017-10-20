@@ -23,6 +23,7 @@ import (
 	"github.com/minio/minio/pkg/auth"
 	"github.com/minio/minio/pkg/errors"
 	"github.com/minio/minio/pkg/hash"
+	"github.com/minio/minio/pkg/signer"
 )
 
 // APIError structure
@@ -87,35 +88,13 @@ const (
 	ErrMethodNotAllowed
 	ErrInvalidPart
 	ErrInvalidPartOrder
-	ErrAuthorizationHeaderMalformed
 	ErrMalformedPOSTRequest
 	ErrPOSTFileRequired
-	ErrSignatureVersionNotSupported
 	ErrBucketNotEmpty
 	ErrAllAccessDisabled
 	ErrMalformedPolicy
-	ErrMissingFields
-	ErrMissingCredTag
-	ErrCredMalformed
 	ErrInvalidRegion
-	ErrInvalidService
-	ErrInvalidRequestVersion
-	ErrMissingSignTag
-	ErrMissingSignHeadersTag
 	ErrPolicyAlreadyExpired
-	ErrMalformedDate
-	ErrMalformedPresignedDate
-	ErrMalformedCredentialDate
-	ErrMalformedCredentialRegion
-	ErrMalformedExpires
-	ErrNegativeExpires
-	ErrAuthHeaderEmpty
-	ErrExpiredPresignRequest
-	ErrRequestNotReadyYet
-	ErrUnsignedHeaders
-	ErrMissingDateHeader
-	ErrInvalidQuerySignatureAlgo
-	ErrInvalidQueryParams
 	ErrBucketAlreadyOwnedByYou
 	ErrInvalidDuration
 	ErrBucketAlreadyExists
@@ -233,16 +212,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "The content of the form does not meet the conditions specified in the policy document.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
-	ErrAccessDenied: {
-		Code:           "AccessDenied",
-		Description:    "Access Denied.",
-		HTTPStatusCode: http.StatusForbidden,
-	},
-	ErrBadDigest: {
-		Code:           "BadDigest",
-		Description:    "The Content-Md5 you specified did not match what we received.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
 	ErrEntityTooSmall: {
 		Code:           "EntityTooSmall",
 		Description:    "Your proposed upload is smaller than the minimum allowed object size.",
@@ -262,11 +231,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Code:           "InternalError",
 		Description:    "We encountered an internal error, please try again.",
 		HTTPStatusCode: http.StatusInternalServerError,
-	},
-	ErrInvalidAccessKeyID: {
-		Code:           "InvalidAccessKeyId",
-		Description:    "The access key ID you provided does not exist in our records.",
-		HTTPStatusCode: http.StatusForbidden,
 	},
 	ErrInvalidBucketName: {
 		Code:           "InvalidBucketName",
@@ -338,11 +302,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "The difference between the request time and the server's time is too large.",
 		HTTPStatusCode: http.StatusForbidden,
 	},
-	ErrSignatureDoesNotMatch: {
-		Code:           "SignatureDoesNotMatch",
-		Description:    "The request signature we calculated does not match the signature you provided. Check your key and signing method.",
-		HTTPStatusCode: http.StatusForbidden,
-	},
 	ErrMethodNotAllowed: {
 		Code:           "MethodNotAllowed",
 		Description:    "The specified method is not allowed against this resource.",
@@ -363,11 +322,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "The operation is not valid for the current state of the object.",
 		HTTPStatusCode: http.StatusForbidden,
 	},
-	ErrAuthorizationHeaderMalformed: {
-		Code:           "AuthorizationHeaderMalformed",
-		Description:    "The authorization header is malformed; the region is wrong; expecting 'us-east-1'.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
 	ErrMalformedPOSTRequest: {
 		Code:           "MalformedPOSTRequest",
 		Description:    "The body of your POST request is not well-formed multipart/form-data.",
@@ -376,11 +330,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 	ErrPOSTFileRequired: {
 		Code:           "InvalidArgument",
 		Description:    "POST requires exactly one file upload per request.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrSignatureVersionNotSupported: {
-		Code:           "InvalidRequest",
-		Description:    "The authorization mechanism you have provided is not supported. Please use AWS4-HMAC-SHA256.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
 	ErrBucketNotEmpty: {
@@ -403,133 +352,15 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "Policy has invalid resource.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
-	ErrMissingFields: {
-		Code:           "MissingFields",
-		Description:    "Missing fields in request.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrMissingCredTag: {
-		Code:           "InvalidRequest",
-		Description:    "Missing Credential field for this request.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrCredMalformed: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "Error parsing the X-Amz-Credential parameter; the Credential is mal-formed; expecting \"<YOUR-AKID>/YYYYMMDD/REGION/SERVICE/aws4_request\".",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrMalformedDate: {
-		Code:           "MalformedDate",
-		Description:    "Invalid date format header, expected to be in ISO8601, RFC1123 or RFC1123Z time format.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrMalformedPresignedDate: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "X-Amz-Date must be in the ISO8601 Long Format \"yyyyMMdd'T'HHmmss'Z'\"",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	// FIXME: Should contain the invalid param set as seen in https://github.com/minio/minio/issues/2385.
-	// right Description:    "Error parsing the X-Amz-Credential parameter; incorrect date format \"%s\". This date in the credential must be in the format \"yyyyMMdd\".",
-	// Need changes to make sure variable messages can be constructed.
-	ErrMalformedCredentialDate: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "Error parsing the X-Amz-Credential parameter; incorrect date format \"%s\". This date in the credential must be in the format \"yyyyMMdd\".",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	// FIXME: Should contain the invalid param set as seen in https://github.com/minio/minio/issues/2385.
-	// right Description:    "Error parsing the X-Amz-Credential parameter; the region 'us-east-' is wrong; expecting 'us-east-1'".
-	// Need changes to make sure variable messages can be constructed.
-	ErrMalformedCredentialRegion: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "Error parsing the X-Amz-Credential parameter; the region is wrong;",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrInvalidRegion: {
-		Code:           "InvalidRegion",
-		Description:    "Region does not match.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	// FIXME: Should contain the invalid param set as seen in https://github.com/minio/minio/issues/2385.
-	// right Description:   "Error parsing the X-Amz-Credential parameter; incorrect service \"s4\". This endpoint belongs to \"s3\".".
-	// Need changes to make sure variable messages can be constructed.
-	ErrInvalidService: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "Error parsing the X-Amz-Credential parameter; incorrect service. This endpoint belongs to \"s3\".",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	// FIXME: Should contain the invalid param set as seen in https://github.com/minio/minio/issues/2385.
-	// Description:   "Error parsing the X-Amz-Credential parameter; incorrect terminal "aws4_reque". This endpoint uses "aws4_request".
-	// Need changes to make sure variable messages can be constructed.
-	ErrInvalidRequestVersion: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "Error parsing the X-Amz-Credential parameter; incorrect terminal. This endpoint uses \"aws4_request\".",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrMissingSignTag: {
-		Code:           "AccessDenied",
-		Description:    "Signature header missing Signature field.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrMissingSignHeadersTag: {
-		Code:           "InvalidArgument",
-		Description:    "Signature header missing SignedHeaders field.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrPolicyAlreadyExpired: {
-		Code:           "AccessDenied",
-		Description:    "Invalid according to Policy: Policy expired.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrMalformedExpires: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "X-Amz-Expires should be a number",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrNegativeExpires: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "X-Amz-Expires must be non-negative",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrAuthHeaderEmpty: {
-		Code:           "InvalidArgument",
-		Description:    "Authorization header is invalid -- one and only one ' ' (space) required.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
 	ErrMissingDateHeader: {
 		Code:           "AccessDenied",
 		Description:    "AWS authentication requires a valid Date or x-amz-date header",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
-	ErrInvalidQuerySignatureAlgo: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "X-Amz-Algorithm only supports \"AWS4-HMAC-SHA256\".",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrExpiredPresignRequest: {
-		Code:           "AccessDenied",
-		Description:    "Request has expired",
-		HTTPStatusCode: http.StatusForbidden,
-	},
-	ErrRequestNotReadyYet: {
-		Code:           "AccessDenied",
-		Description:    "Request is not valid yet",
-		HTTPStatusCode: http.StatusForbidden,
-	},
 	ErrSlowDown: {
 		Code:           "SlowDown",
 		Description:    "Please reduce your request",
 		HTTPStatusCode: http.StatusServiceUnavailable,
-	},
-	// FIXME: Actual XML error response also contains the header which missed in list of signed header parameters.
-	ErrUnsignedHeaders: {
-		Code:           "AccessDenied",
-		Description:    "There were headers present in the request which were not signed",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-	ErrInvalidQueryParams: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "Query-string authentication version 4 requires the X-Amz-Algorithm, X-Amz-Credential, X-Amz-Signature, X-Amz-Date, X-Amz-SignedHeaders, and X-Amz-Expires parameters.",
-		HTTPStatusCode: http.StatusBadRequest,
 	},
 	ErrBucketAlreadyOwnedByYou: {
 		Code:           "BucketAlreadyOwnedByYou",
@@ -649,13 +480,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		HTTPStatusCode: http.StatusBadRequest,
 	},
 
-	/// S3 extensions.
-	ErrContentSHA256Mismatch: {
-		Code:           "XAmzContentSHA256Mismatch",
-		Description:    "The provided 'x-amz-content-sha256' header does not match what was computed.",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
-
 	/// Minio extensions.
 	ErrStorageFull: {
 		Code:           "XMinioStorageFull",
@@ -742,11 +566,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    errObjectTampered.Error(),
 		HTTPStatusCode: http.StatusPartialContent,
 	},
-	ErrMaximumExpires: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "X-Amz-Expires must be less than a week (in seconds); that is, the given X-Amz-Expires must be less than 604800 seconds",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
 	// Generic Invalid-Request error. Should be used for response errors only for unlikely
 	// corner case errors for which introducing new APIErrorCode is not worth it. errorIf()
 	// should be used to log the error at the source of the error for debugging purposes.
@@ -762,7 +581,7 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 // toAPIErrorCode - Converts embedded errors. Convenience
 // function written to handle all cases where we have known types of
 // errors returned by underlying layers.
-func toAPIErrorCode(err error) (apiErr APIErrorCode) {
+func toAPIErrorCode(err error) (apiErr interface{}) {
 	if err == nil {
 		return ErrNone
 	}
@@ -771,7 +590,7 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 	// Verify if the underlying error is signature mismatch.
 	switch err {
 	case errSignatureMismatch:
-		apiErr = ErrSignatureDoesNotMatch
+		apiErr = signer.SignatureDoesNotMatch
 	case errDataTooLarge:
 		apiErr = ErrEntityTooLarge
 	case errDataTooSmall:
@@ -805,14 +624,14 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 	case errEncryptedObject:
 		return ErrSSEEncryptedObject
 	case errSSEKeyMismatch:
-		return ErrAccessDenied // no access without correct key
+		return signer.AccessDenied // no access without correct key
 	}
 
 	switch err.(type) {
 	case StorageFull:
 		apiErr = ErrStorageFull
 	case hash.BadDigest:
-		apiErr = ErrBadDigest
+		apiErr = signer.BadDigest
 	case AllAccessDisabled:
 		apiErr = ErrAllAccessDisabled
 	case IncompleteBody:
@@ -820,7 +639,7 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 	case ObjectExistsAsDirectory:
 		apiErr = ErrObjectExistsAsDirectory
 	case PrefixAccessDenied:
-		apiErr = ErrAccessDenied
+		apiErr = signer.AccessDenied
 	case BucketNameInvalid:
 		apiErr = ErrInvalidBucketName
 	case BucketNotFound:
@@ -856,9 +675,9 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 	case PartTooSmall:
 		apiErr = ErrEntityTooSmall
 	case SignatureDoesNotMatch:
-		apiErr = ErrSignatureDoesNotMatch
+		apiErr = signer.SignatureDoesNotMatch
 	case hash.SHA256Mismatch:
-		apiErr = ErrContentSHA256Mismatch
+		apiErr = signer.ContentSHA256Mismatch
 	case ObjectTooLarge:
 		apiErr = ErrEntityTooLarge
 	case ObjectTooSmall:
@@ -876,7 +695,7 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 	case BucketPolicyNotFound:
 		apiErr = ErrNoSuchBucketPolicy
 	default:
-		apiErr = ErrInternalError
+		apiErr = signer.InternalError
 	}
 
 	return apiErr
