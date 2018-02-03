@@ -61,6 +61,9 @@ func registerDistXLRouters(mux *router.Router, endpoints EndpointList) error {
 var globalHandlers = []HandlerFunc{
 	// set HTTP security headers such as Content-Security-Policy.
 	addSecurityHeaders,
+	// set Bucket forwarding handler to proxy path style requests
+	// when federated backend is enabled.
+	setBucketForwardingHandler,
 	// Ratelimit the incoming requests using a token bucket algorithm
 	setRateLimitHandler,
 	// Validate all the incoming paths.

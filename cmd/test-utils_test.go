@@ -601,7 +601,7 @@ func newTestConfig(bucketLocation string) (rootPath string, err error) {
 	globalServerConfig.SetRegion(bucketLocation)
 
 	// Save config.
-	if err = globalServerConfig.Save(); err != nil {
+	if err = globalServerConfig.Save(getConfigFile()); err != nil {
 		return "", err
 	}
 
