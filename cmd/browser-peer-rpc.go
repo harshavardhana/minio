@@ -60,7 +60,7 @@ func (br *browserPeerAPIHandlers) SetAuthPeer(args SetAuthPeerArgs, reply *AuthR
 	prevCred := globalServerConfig.SetCredential(args.Creds)
 
 	// Save credentials to config file
-	if err := globalServerConfig.Save(); err != nil {
+	if err := globalServerConfig.Save(getConfigFile()); err != nil {
 		// Save the current creds when failed to update.
 		globalServerConfig.SetCredential(prevCred)
 

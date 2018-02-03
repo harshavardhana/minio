@@ -21,6 +21,7 @@ import (
 
 	"github.com/minio/minio/pkg/auth"
 	"github.com/minio/minio/pkg/event/target"
+	"github.com/minio/minio/pkg/quick"
 )
 
 /////////////////// Config V1 ///////////////////
@@ -582,6 +583,8 @@ type serverConfigV22 struct {
 
 // serverConfigV23 is just like version '22' with addition of cache field
 type serverConfigV23 struct {
+	quick.Config `json:"-"` // ignore interfaces
+
 	Version string `json:"version"`
 
 	// S3 API configuration.

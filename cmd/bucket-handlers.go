@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/coreos/etcd/client"
 	mux "github.com/gorilla/mux"
 	"github.com/minio/minio-go/pkg/policy"
 	"github.com/minio/minio-go/pkg/set"
@@ -238,11 +239,29 @@ func (api objectAPIHandlers) ListBucketsHandler(w http.ResponseWriter, r *http.R
 		writeErrorResponse(w, s3Error, r.URL)
 		return
 	}
-	// Invoke the list buckets.
-	bucketsInfo, err := listBuckets(ctx)
-	if err != nil {
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-		return
+
+	// If etcd, dns federation configured list buckets from etcd.
+	var bucketsInfo []BucketInfo
+	if globalDNSConfig != nil {
+		dnsBuckets, err := globalDNSConfig.List()
+		if err != nil {
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
+		for _, dnsRecord := range dnsBuckets {
+			bucketsInfo = append(bucketsInfo, BucketInfo{
+				Name:    dnsRecord.Key,
+				Created: dnsRecord.CreationDate,
+			})
+		}
+	} else {
+		// Invoke the list buckets.
+		var err error
+		bucketsInfo, err = listBuckets(ctx)
+		if err != nil {
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
 	}
 
 	// Generate response.
@@ -435,12 +454,33 @@ func (api objectAPIHandlers) PutBucketHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	bucketLock := globalNSMutex.NewNSLock(bucket, "")
-	if err := bucketLock.GetLock(globalObjectTimeout); err != nil {
-		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+	if globalDNSConfig != nil {
+		if _, err := globalDNSConfig.Get(bucket); err != nil {
+			if client.IsKeyNotFound(err) {
+				// Proceed to creating a bucket.
+				if err = objectAPI.MakeBucketWithLocation(ctx, bucket, location); err != nil {
+					writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+					return
+				}
+				if err = globalDNSConfig.Put(bucket); err != nil {
+					objectAPI.DeleteBucket(ctx, bucket)
+					writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+					return
+				}
+
+				// Make sure to add Location information here only for bucket
+				w.Header().Set("Location", getObjectLocation(r, globalDomainName, bucket, ""))
+
+				writeSuccessResponseHeadersOnly(w)
+				return
+			}
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+
+		}
+		writeErrorResponse(w, ErrBucketAlreadyOwnedByYou, r.URL)
 		return
 	}
-	defer bucketLock.Unlock()
 
 	// Proceed to creating a bucket.
 	err := objectAPI.MakeBucketWithLocation(ctx, bucket, location)
@@ -744,6 +784,15 @@ func (api objectAPIHandlers) DeleteBucketHandler(w http.ResponseWriter, r *http.
 	for addr, err := range globalNotificationSys.DeleteBucket(bucket) {
 		logger.GetReqInfo(ctx).AppendTags("remotePeer", addr.Name)
 		logger.LogIf(ctx, err)
+	}
+
+	if globalDNSConfig != nil {
+		if err := globalDNSConfig.Delete(bucket); err != nil {
+			// Deleting DNS entry failed, attempt to create the bucket again.
+			objectAPI.MakeBucketWithLocation(ctx, bucket, "")
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
 	}
 
 	// Write success response.
