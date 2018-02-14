@@ -478,7 +478,11 @@ func healObject(ctx context.Context, storageDisks []StorageAPI, bucket string, o
 			}
 			// append part checksums
 			checksumInfos[i] = append(checksumInfos[i],
-				ChecksumInfo{partName, file.Algorithm, file.Checksums[i]})
+				ChecksumInfo{
+					Name:      partName,
+					Algorithm: file.Algorithm,
+					Hash:      file.Checksums[i],
+				})
 		}
 
 		// If all disks are having errors, we give up.

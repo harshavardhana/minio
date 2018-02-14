@@ -659,7 +659,11 @@ func (xl xlObjects) putObject(ctx context.Context, bucket string, object string,
 
 		for i := range partsMetadata {
 			partsMetadata[i].AddObjectPart(partIdx, partName, "", file.Size)
-			partsMetadata[i].Erasure.AddChecksumInfo(ChecksumInfo{partName, file.Algorithm, file.Checksums[i]})
+			partsMetadata[i].Erasure.AddChecksumInfo(ChecksumInfo{
+				Name:      partName,
+				Algorithm: file.Algorithm,
+				Hashes:    file.ChecksumsBlocks[i],
+			})
 		}
 
 		// We wrote everything, break out.
