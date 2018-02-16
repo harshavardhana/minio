@@ -109,8 +109,8 @@ func (a GatewayUnsupported) ListObjectsHeal(bucket, prefix, marker, delimiter st
 }
 
 // CopyObject copies a blob from source container to destination container.
-func (a GatewayUnsupported) CopyObject(srcBucket string, srcObject string, destBucket string, destObject string,
-	metadata map[string]string, srcEtag string) (objInfo ObjectInfo, err error) {
+func (a GatewayUnsupported) CopyObject(srcBucket string, srcObject string, destBucket string, destObject string, srcKey, destKey []byte,
+	metadata map[string]string, srcObjInfo ObjectInfo) (objInfo ObjectInfo, err error) {
 	return objInfo, errors.Trace(NotImplemented{})
 }
 

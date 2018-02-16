@@ -290,7 +290,8 @@ func (l *s3Objects) PutObject(bucket string, object string, data *hash.Reader, m
 }
 
 // CopyObject copies an object from source bucket to a destination bucket.
-func (l *s3Objects) CopyObject(srcBucket string, srcObject string, dstBucket string, dstObject string, metadata map[string]string, srcEtag string) (objInfo minio.ObjectInfo, err error) {
+func (l *s3Objects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, srcKey, dstKey []byte,
+	metadata map[string]string, srcObjInfo minio.ObjectInfo) (objInfo minio.ObjectInfo, err error) {
 	// Set this header such that following CopyObject() always sets the right metadata on the destination.
 	// metadata input is already a trickled down value from interpreting x-amz-metadata-directive at
 	// handler layer. So what we have right now is supposed to be applied on the destination object anyways.

@@ -43,7 +43,8 @@ type ObjectLayer interface {
 	GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
 	GetObjectInfo(bucket, object string) (objInfo ObjectInfo, err error)
 	PutObject(bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error)
-	CopyObject(srcBucket, srcObject, destBucket, destObject string, metadata map[string]string, srcETag string) (objInfo ObjectInfo, err error)
+	CopyObject(srcBucket, srcObject, destBucket, destObject string, srcKey, destKey []byte,
+		metadata map[string]string, srcObjInfo ObjectInfo) (objInfo ObjectInfo, err error)
 	DeleteObject(bucket, object string) error
 
 	// Multipart operations.

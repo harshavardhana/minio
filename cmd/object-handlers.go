@@ -241,7 +241,7 @@ func (api objectAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if objectAPI.IsEncryptionSupported() && !objInfo.IsDir {
+	if objectAPI.IsEncryptionSupported() {
 		if apiErr, encrypted := DecryptObjectInfo(&objInfo, r.Header); apiErr != ErrNone {
 			writeErrorResponse(w, apiErr, r.URL)
 			return
@@ -343,12 +343,6 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if IsSSECustomerRequest(r.Header) { // handle SSE-C requests
-		// SSE-C is not implemented for CopyObject operations yet
-		writeErrorResponse(w, ErrNotImplemented, r.URL)
-		return
-	}
-
 	// Check if metadata directive is valid.
 	if !isMetadataDirectiveValid(r.Header) {
 		writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
@@ -361,6 +355,13 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
+	}
+
+	if objectAPI.IsEncryptionSupported() {
+		if apiErr, _ := DecryptCopyObjectInfo(&objInfo, r.Header); apiErr != ErrNone {
+			writeErrorResponse(w, apiErr, r.URL)
+			return
+		}
 	}
 
 	// Verify before x-amz-copy-source preconditions before continuing with CopyObject.
@@ -390,9 +391,25 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	var srcKey, destKey []byte
+	if IsSSECopyCustomerRequest(r.Header) {
+		srcKey, err = ParseSSECopyCustomerRequest(r)
+		if err != nil {
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
+	}
+	if IsSSECustomerRequest(r.Header) {
+		destKey, err = ParseSSECustomerRequest(r)
+		if err != nil {
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
+	}
+
 	// Copy source object to destination, if source and destination
 	// object is same then only metadata is updated.
-	objInfo, err = objectAPI.CopyObject(srcBucket, srcObject, dstBucket, dstObject, newMetadata, objInfo.ETag)
+	objInfo, err = objectAPI.CopyObject(srcBucket, srcObject, dstBucket, dstObject, srcKey, destKey, newMetadata, objInfo)
 	if err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
@@ -557,8 +574,9 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
+
 	if objectAPI.IsEncryptionSupported() {
-		if IsSSECustomerRequest(r.Header) && size > 0 { // handle SSE-C requests
+		if IsSSECustomerRequest(r.Header) && !hasSuffix(object, slashSeparator) { // handle SSE-C requests
 			reader, err = EncryptRequest(hashReader, r, metadata)
 			if err != nil {
 				writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -578,6 +596,7 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
+
 	w.Header().Set("ETag", "\""+objInfo.ETag+"\"")
 	if objectAPI.IsEncryptionSupported() {
 		if IsSSECustomerRequest(r.Header) {

@@ -802,8 +802,8 @@ func (l *gcsGateway) PutObject(bucket string, key string, data *hash.Reader, met
 }
 
 // CopyObject - Copies a blob from source container to destination container.
-func (l *gcsGateway) CopyObject(srcBucket string, srcObject string, destBucket string, destObject string,
-	metadata map[string]string, srcEtag string) (minio.ObjectInfo, error) {
+func (l *gcsGateway) CopyObject(srcBucket, srcObject, destBucket, destObject string, srcKey, dstKey []byte,
+	metadata map[string]string, srcObjInfo minio.ObjectInfo) (objInfo minio.ObjectInfo, err error) {
 
 	src := l.client.Bucket(srcBucket).Object(srcObject)
 	dst := l.client.Bucket(destBucket).Object(destObject)

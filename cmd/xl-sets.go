@@ -542,41 +542,62 @@ func (s *xlSets) DeleteObject(bucket string, object string) (err error) {
 }
 
 // CopyObject - copies objects from one hashedSet to another hashedSet, on server side.
-func (s *xlSets) CopyObject(srcBucket, srcObject, destBucket, destObject string, metadata map[string]string, srcEtag string) (objInfo ObjectInfo, err error) {
-	if len(s.sets) == 1 {
-		return s.sets[0].CopyObject(srcBucket, srcObject, destBucket, destObject, metadata, srcEtag)
-	}
-
+func (s *xlSets) CopyObject(srcBucket, srcObject, destBucket, destObject string, srcKey, destKey []byte,
+	metadata map[string]string, srcObjInfo ObjectInfo) (objInfo ObjectInfo, err error) {
 	srcSet := s.getHashedSet(srcObject)
 	destSet := s.getHashedSet(destObject)
-
-	objInfo, err = srcSet.GetObjectInfo(srcBucket, srcObject)
-	if err != nil {
-		return objInfo, err
-	}
 
 	// Check if this request is only metadata update.
 	cpMetadataOnly := isStringEqual(pathJoin(srcBucket, srcObject), pathJoin(destBucket, destObject))
 	if cpMetadataOnly {
-		return srcSet.CopyObject(srcBucket, srcObject, destBucket, destObject, metadata, srcEtag)
+		return srcSet.CopyObject(srcBucket, srcObject, destBucket, destObject, nil, nil, metadata, srcObjInfo)
 	}
 
 	// Initialize pipe.
 	pipeReader, pipeWriter := io.Pipe()
 
 	go func() {
-		if gerr := srcSet.GetObject(srcBucket, srcObject, 0, objInfo.Size, pipeWriter, srcEtag); gerr != nil {
-			errorIf(gerr, "Unable to read %s of the object `%s/%s`.", srcBucket, srcObject)
-			pipeWriter.CloseWithError(toObjectErr(gerr, srcBucket, srcObject))
-			return
+		if srcKey != nil {
+			w, gerr := DecryptSource(pipeWriter, srcKey, srcObjInfo.UserDefined)
+			if gerr != nil {
+				errorIf(gerr, "Unable to read the object %s/%s.", srcBucket, srcObject)
+				pipeWriter.CloseWithError(toObjectErr(gerr, srcBucket, srcObject))
+				return
+			}
+			if gerr := srcSet.GetObject(srcBucket, srcObject, 0, srcObjInfo.EncryptedSize(), w, srcObjInfo.ETag); gerr != nil {
+				errorIf(gerr, "Unable to read the object %s/%s.", srcBucket, srcObject)
+				pipeWriter.CloseWithError(toObjectErr(gerr, srcBucket, srcObject))
+				return
+			}
+		} else {
+			if gerr := srcSet.GetObject(srcBucket, srcObject, 0, srcObjInfo.Size, pipeWriter, srcObjInfo.ETag); gerr != nil {
+				errorIf(gerr, "Unable to read the object %s/%s.", srcBucket, srcObject)
+				pipeWriter.CloseWithError(toObjectErr(gerr, srcBucket, srcObject))
+				return
+			}
 		}
 		pipeWriter.Close() // Close writer explicitly signalling we wrote all data.
 	}()
 
-	hashReader, err := hash.NewReader(pipeReader, objInfo.Size, "", "")
+	hashReader, err := hash.NewReader(pipeReader, srcObjInfo.Size, "", "")
 	if err != nil {
 		pipeReader.CloseWithError(err)
 		return objInfo, toObjectErr(errors.Trace(err), destBucket, destObject)
+	}
+
+	if destKey != nil {
+		reader, rerr := EncryptTarget(hashReader, destKey, metadata)
+		if rerr != nil {
+			pipeReader.CloseWithError(rerr)
+			return objInfo, toObjectErr(errors.Trace(rerr), destBucket, destObject)
+		}
+
+		info := ObjectInfo{Size: srcObjInfo.Size}
+		hashReader, err = hash.NewReader(reader, info.EncryptedSize(), "", "") // do not try to verify encrypted content
+		if err != nil {
+			pipeReader.CloseWithError(err)
+			return objInfo, toObjectErr(errors.Trace(err), destBucket, destObject)
+		}
 	}
 
 	objInfo, err = destSet.PutObject(destBucket, destObject, hashReader, metadata)

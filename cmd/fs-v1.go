@@ -360,7 +360,8 @@ func (fs *fsObjects) DeleteBucket(bucket string) error {
 // CopyObject - copy object source object to destination object.
 // if source object and destination object are same we only
 // update metadata.
-func (fs *fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, metadata map[string]string, srcEtag string) (oi ObjectInfo, e error) {
+func (fs *fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, srcKey, destKey []byte,
+	metadata map[string]string, srcObjInfo ObjectInfo) (oi ObjectInfo, e error) {
 	cpSrcDstSame := srcBucket == dstBucket && srcObject == dstObject
 	// Hold write lock on destination since in both cases
 	// - if source and destination are same
@@ -387,27 +388,11 @@ func (fs *fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject strin
 		return oi, toObjectErr(err, srcBucket)
 	}
 
-	// Stat the file to get file size.
-	fi, err := fsStatFile(pathJoin(fs.fsPath, srcBucket, srcObject))
-	if err != nil {
-		return oi, toObjectErr(err, srcBucket, srcObject)
-	}
-	if srcEtag != "" {
-		etag, perr := fs.getObjectETag(srcBucket, srcObject)
-		if perr != nil {
-			return oi, toObjectErr(perr, srcBucket, srcObject)
-		}
-		if etag != srcEtag {
-			return oi, toObjectErr(errors.Trace(InvalidETag{}), srcBucket, srcObject)
-		}
-	}
-
 	// Check if this request is only metadata update.
 	cpMetadataOnly := isStringEqual(pathJoin(srcBucket, srcObject), pathJoin(dstBucket, dstObject))
 	if cpMetadataOnly {
 		fsMetaPath := pathJoin(fs.fsPath, minioMetaBucket, bucketMetaPrefix, srcBucket, srcObject, fsMetaJSONFile)
-		var wlk *lock.LockedFile
-		wlk, err = fs.rwPool.Write(fsMetaPath)
+		wlk, err := fs.rwPool.Write(fsMetaPath)
 		if err != nil {
 			return oi, toObjectErr(errors.Trace(err), srcBucket, srcObject)
 		}
@@ -421,29 +406,60 @@ func (fs *fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject strin
 			return oi, toObjectErr(err, srcBucket, srcObject)
 		}
 
+		// Stat the file to get file size.
+		fi, err := fsStatFile(pathJoin(fs.fsPath, srcBucket, srcObject))
+		if err != nil {
+			return oi, toObjectErr(err, srcBucket, srcObject)
+		}
+
 		// Return the new object info.
 		return fsMeta.ToObjectInfo(srcBucket, srcObject, fi), nil
 	}
-
-	// Length of the file to read.
-	length := fi.Size()
 
 	// Initialize pipe.
 	pipeReader, pipeWriter := io.Pipe()
 
 	go func() {
-		var startOffset int64 // Read the whole file.
-		if gerr := fs.getObject(srcBucket, srcObject, startOffset, length, pipeWriter, ""); gerr != nil {
-			errorIf(gerr, "Unable to read %s/%s.", srcBucket, srcObject)
-			pipeWriter.CloseWithError(gerr)
-			return
+		if srcKey != nil {
+			w, gerr := DecryptSource(pipeWriter, srcKey, srcObjInfo.UserDefined)
+			if gerr != nil {
+				errorIf(gerr, "Unable to read the object %s/%s.", srcBucket, srcObject)
+				pipeWriter.CloseWithError(toObjectErr(gerr, srcBucket, srcObject))
+				return
+			}
+			if gerr = fs.getObject(srcBucket, srcObject, 0, srcObjInfo.EncryptedSize(), w, srcObjInfo.ETag); gerr != nil {
+				errorIf(gerr, "Unable to read the object %s/%s.", srcBucket, srcObject)
+				pipeWriter.CloseWithError(toObjectErr(gerr, srcBucket, srcObject))
+				return
+			}
+		} else {
+			if gerr := fs.getObject(srcBucket, srcObject, 0, srcObjInfo.Size, pipeWriter, srcObjInfo.ETag); gerr != nil {
+				errorIf(gerr, "Unable to read the object %s/%s.", srcBucket, srcObject)
+				pipeWriter.CloseWithError(gerr)
+				return
+			}
 		}
 		pipeWriter.Close() // Close writer explicitly signalling we wrote all data.
 	}()
 
-	hashReader, err := hash.NewReader(pipeReader, length, "", "")
+	hashReader, err := hash.NewReader(pipeReader, srcObjInfo.Size, "", "")
 	if err != nil {
 		return oi, toObjectErr(err, dstBucket, dstObject)
+	}
+
+	if destKey != nil {
+		reader, rerr := EncryptTarget(hashReader, destKey, metadata)
+		if rerr != nil {
+			pipeReader.CloseWithError(rerr)
+			return oi, toObjectErr(errors.Trace(rerr), dstBucket, dstObject)
+		}
+
+		info := ObjectInfo{Size: srcObjInfo.Size}
+		hashReader, err = hash.NewReader(reader, info.EncryptedSize(), "", "") // do not try to verify encrypted content
+		if err != nil {
+			pipeReader.CloseWithError(err)
+			return oi, toObjectErr(errors.Trace(err), dstBucket, dstObject)
+		}
 	}
 
 	objInfo, err := fs.putObject(dstBucket, dstObject, hashReader, metadata)

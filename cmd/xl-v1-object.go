@@ -79,7 +79,8 @@ func (xl xlObjects) prepareFile(bucket, object string, size int64, onlineDisks [
 // CopyObject - copy object source object to destination object.
 // if source object and destination object are same we only
 // update metadata.
-func (xl xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, metadata map[string]string, srcEtag string) (oi ObjectInfo, e error) {
+func (xl xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, srcKey, destKey []byte,
+	metadata map[string]string, srcObjInfo ObjectInfo) (oi ObjectInfo, e error) {
 	cpSrcDstSame := srcBucket == dstBucket && srcObject == dstObject
 	// Hold write lock on destination since in both cases
 	// - if source and destination are same
@@ -103,12 +104,12 @@ func (xl xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string
 		defer objectSRLock.RUnlock()
 	}
 
-	if srcEtag != "" {
+	if srcObjInfo.ETag != "" {
 		objInfo, perr := xl.getObjectInfo(srcBucket, srcObject)
 		if perr != nil {
 			return oi, toObjectErr(perr, srcBucket, srcObject)
 		}
-		if objInfo.ETag != srcEtag {
+		if objInfo.ETag != srcObjInfo.ETag {
 			return oi, toObjectErr(errors.Trace(InvalidETag{}), srcBucket, srcObject)
 		}
 	}

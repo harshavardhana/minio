@@ -611,7 +611,8 @@ func (l *ossObjects) PutObject(bucket, object string, data *hash.Reader, metadat
 }
 
 // CopyObject copies an object from source bucket to a destination bucket.
-func (l *ossObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, metadata map[string]string, srcEtag string) (objInfo minio.ObjectInfo, err error) {
+func (l *ossObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string, srcKey, dstKey []byte,
+	metadata map[string]string, srcObjInfo minio.ObjectInfo) (objInfo minio.ObjectInfo, err error) {
 	bkt, err := l.Client.Bucket(srcBucket)
 	if err != nil {
 		return objInfo, ossToObjectError(errors.Trace(err), srcBucket, srcObject)
