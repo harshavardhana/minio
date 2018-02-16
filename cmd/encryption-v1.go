@@ -473,7 +473,7 @@ func DecryptCopyObjectInfo(info *ObjectInfo, headers http.Header) (apiErr APIErr
 	if apiErr, encrypted = ErrNone, info.IsEncrypted(); !encrypted && IsSSECopyCustomerRequest(headers) {
 		apiErr = ErrInvalidEncryptionParameters
 	} else if encrypted {
-		if !IsSSECustomerRequest(headers) {
+		if !IsSSECopyCustomerRequest(headers) {
 			apiErr = ErrSSEEncryptedObject
 			return
 		}

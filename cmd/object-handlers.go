@@ -287,7 +287,14 @@ func (api objectAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.Re
 
 // Extract metadata relevant for an CopyObject operation based on conditional
 // header values specified in X-Amz-Metadata-Directive.
-func getCpObjMetadataFromHeader(header http.Header, defaultMeta map[string]string) (map[string]string, error) {
+func getCpObjMetadataFromHeader(header http.Header, userMeta map[string]string) (map[string]string, error) {
+	// Make a copy of the supplied metadata to avoid
+	// to change the original one.
+	defaultMeta := make(map[string]string, len(userMeta))
+	for k, v := range userMeta {
+		defaultMeta[k] = v
+	}
+
 	// Make sure to remove saved etag if any, CopyObject calculates a new one.
 	delete(defaultMeta, "etag")
 
