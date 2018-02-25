@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/minio/minio-go/pkg/set"
 	"github.com/minio/minio/pkg/errors"
 )
 
@@ -195,23 +196,39 @@ func TestExtractMetadataHeaders(t *testing.T) {
 
 // Test getResource()
 func TestGetResource(t *testing.T) {
+	saveLocalIPv4 := set.NewStringSet()
+	for k, v := range localIP4 {
+		saveLocalIPv4[k] = v
+	}
+	defer func() {
+		localIP4 = saveLocalIPv4
+	}()
 	testCases := []struct {
 		p                string
 		host             string
+		addHost          bool
 		domain           string
 		expectedResource string
 	}{
-		{"/a/b/c", "test.mydomain.com", "mydomain.com", "/test/a/b/c"},
-		{"/a/b/c", "test.mydomain.com", "notmydomain.com", "/a/b/c"},
-		{"/a/b/c", "test.mydomain.com", "", "/a/b/c"},
+		{"/a/b/c", "test.mydomain.com", true, "mydomain.com", "/test/a/b/c"},
+		{"/a/b/c", "test.mydomain.com", true, "notmydomain.com", "/a/b/c"},
+		{"/a/b/c", "test.mydomain.com", true, "", "/a/b/c"},
+		{"/a/b/c", "127.0.0.2", false, "", "/127.0.0.2/a/b/c"},
+		{"/a/b/c", "notmydomain.com", true, "mydomain.com", "/notmydomain.com/a/b/c"},
 	}
 	for i, test := range testCases {
+		if test.addHost {
+			localIP4.Add(test.host)
+		}
 		gotResource, err := getResource(test.p, test.host, test.domain)
 		if err != nil {
 			t.Fatal(err)
 		}
+		if test.addHost {
+			localIP4.Remove(test.host)
+		}
 		if gotResource != test.expectedResource {
-			t.Fatalf("test %d: expected %s got %s", i+1, test.expectedResource, gotResource)
+			t.Errorf("test %d: expected %s got %s", i+1, test.expectedResource, gotResource)
 		}
 	}
 }

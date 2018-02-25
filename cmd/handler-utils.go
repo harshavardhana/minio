@@ -266,23 +266,41 @@ func httpTraceHdrs(f http.HandlerFunc) http.HandlerFunc {
 
 // Returns "/bucketName/objectName" for path-style or virtual-host-style requests.
 func getResource(path string, host string, domain string) (string, error) {
-	if domain == "" {
-		return path, nil
-	}
-	// If virtual-host-style is enabled construct the "resource" properly.
 	if strings.Contains(host, ":") {
-		// In bucket.mydomain.com:9000, strip out :9000
+		// In mydomain.com:9000, strip out :9000
 		var err error
 		if host, _, err = net.SplitHostPort(host); err != nil {
 			errorIf(err, "Unable to split %s", host)
 			return "", err
 		}
 	}
+
+	var reservedPrefix string
+	if ip := net.ParseIP(host); ip != nil {
+		if !localIP4.Contains(host) {
+			reservedPrefix = slashSeparator + host
+		}
+	} else if host != globalMinioHost {
+		reservedPrefix = slashSeparator + host
+	} else if domain != "" {
+		if strings.ha
+	if domain == "" {
+		if reservedPrefix == "" {
+			return path, nil
+		}
+		return pathJoin(reservedPrefix, path), nil
+	}
 	if !strings.HasSuffix(host, "."+domain) {
-		return path, nil
+		if reservedPrefix == "" {
+			return path, nil
+		}
+		return pathJoin(reservedPrefix, path), nil
 	}
 	bucket := strings.TrimSuffix(host, "."+domain)
-	return slashSeparator + pathJoin(bucket, path), nil
+	if reservedPrefix == "" {
+		return slashSeparator + pathJoin(bucket, path), nil
+	}
+	return pathJoin(reservedPrefix, bucket, path), nil
 }
 
 // If none of the http routes match respond with MethodNotAllowed
