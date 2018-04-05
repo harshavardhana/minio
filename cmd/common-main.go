@@ -17,7 +17,9 @@
 package cmd
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -45,24 +47,32 @@ func checkUpdate(mode string) {
 	}
 }
 
+// Initialize and load config from remote etcd or local config directory
 func initConfig() {
 	if globalEtcdClient != nil {
-		if err := loadConfig(); err != nil {
+		kapi := etcdc.NewKeysAPI(globalEtcdClient)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		_, err := kapi.Get(ctx, getConfigFile(), nil)
+		cancel()
+		if err == nil {
+			logger.FatalIf(migrateConfig(), "Config migration failed.")
+			logger.FatalIf(loadConfig(), "Unable to load config version: '%s'.", serverConfigVersion)
+		} else {
 			if etcdc.IsKeyNotFound(err) {
-				fatalIf(newConfig(), "Unable to initialize minio config for the first time.")
+				logger.FatalIf(newConfig(), "Unable to initialize minio config for the first time.")
 				log.Println("Created minio configuration file successfully at", globalEtcdClient.Endpoints())
 			} else {
-				fatalIf(err, "Unable to load config version: '%s'.", serverConfigVersion)
+				logger.FatalIf(err, "Unable to load config version: '%s'.", serverConfigVersion)
 			}
 		}
 		return
 	}
 
-	// Config file does not exist, we create it fresh and return upon success.
 	if isFile(getConfigFile()) {
 		logger.FatalIf(migrateConfig(), "Config migration failed.")
 		logger.FatalIf(loadConfig(), "Unable to load config version: '%s'.", serverConfigVersion)
 	} else {
+		// Config file does not exist, we create it fresh and return upon success.
 		logger.FatalIf(newConfig(), "Unable to initialize minio config for the first time.")
 		logger.Info("Created minio configuration file successfully at " + getConfigDir())
 	}
@@ -152,7 +162,7 @@ func handleCommonEnvVars() {
 				TLSHandshakeTimeout: 10 * time.Second,
 			},
 		})
-		fatalIf(err, "Unable to initialize etcd with %s", etcdEndpoints)
+		logger.FatalIf(err, "Unable to initialize etcd with %s", etcdEndpoints)
 	}
 
 	globalDomainName, ok = os.LookupEnv("MINIO_DOMAIN")
@@ -160,11 +170,11 @@ func handleCommonEnvVars() {
 		globalIsEnvDomainName = true
 	}
 
-	globalDomainIP = os.Getenv("MINIO_DOMAIN_IP")
+	globalDomainIP = os.Getenv("MINIO_PUBLIC_IP")
 	if globalDomainName != "" && globalDomainIP != "" && globalEtcdClient != nil {
 		var err error
 		globalDNSConfig, err = dns.NewCoreDNS(globalDomainName, globalDomainIP, globalMinioPort, globalEtcdClient)
-		fatalIf(err, "Unable to initialize DNS config for %s.", globalDomainName)
+		logger.FatalIf(err, "Unable to initialize DNS config for %s.", globalDomainName)
 	}
 
 	if drives := os.Getenv("MINIO_CACHE_DRIVES"); drives != "" {
