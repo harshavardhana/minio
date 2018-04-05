@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -105,6 +106,44 @@ func isBucketActionAllowed(action, bucket, prefix string, objectAPI ObjectLayer)
 	var conditionKeyMap map[string]set.StringSet
 	// Validate action, resource and conditions with current policy statements.
 	return bucketPolicyEvalStatements(action, resource, conditionKeyMap, bp.Statements)
+}
+
+// Check if there are buckets on server without corresponding entry in etcd backend and
+// make entries. Here is the general flow
+// - Range over all the available buckets
+// - Check if a bucket has an entry in etcd backend
+// -- If no, make an entry
+// -- If yes, check if the IP of entry matches local IP. This means entry is for this instance.
+// -- If IP of the entry doesn't match, this means entry is for another instance. Log an error to console.
+func initFederatorBackend() {
+	objLayer := newObjectLayerFn()
+	// List all buckets
+	b, err := objLayer.ListBuckets(context.Background())
+	if err != nil {
+		logger.LogIf(context.Background(), err)
+		return
+	}
+	for _, bInfo := range b {
+		go func(bName string) {
+			r, err := globalDNSConfig.Get(bName)
+			if err != nil {
+				if client.IsKeyNotFound(err) {
+					// Make a new entry
+					err = globalDNSConfig.Put(bName)
+					logger.LogIf(context.Background(), err)
+					return
+				}
+				logger.LogIf(context.Background(), err)
+				return
+			}
+			if r.Host != globalDomainIP {
+				// Log error that entry already present for different host
+				err = fmt.Errorf("Unable to add bucket DNS entry for bucket %s, an entry exists for the same key. Use %s to access the bucket, or rename it to a unique value", bName, globalDomainIP)
+				logger.LogIf(context.Background(), err)
+			}
+			return
+		}(bInfo.Name)
+	}
 }
 
 // GetBucketLocationHandler - GET Bucket location.
@@ -239,7 +278,6 @@ func (api objectAPIHandlers) ListBucketsHandler(w http.ResponseWriter, r *http.R
 		writeErrorResponse(w, s3Error, r.URL)
 		return
 	}
-
 	// If etcd, dns federation configured list buckets from etcd.
 	var bucketsInfo []BucketInfo
 	if globalDNSConfig != nil {
