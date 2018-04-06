@@ -83,8 +83,17 @@ func (s *xlSets) isConnected(endpoint Endpoint) bool {
 			if s.xlDisks[i][j] == nil {
 				continue
 			}
-			if s.xlDisks[i][j].String() != endpoint.String() {
-				continue
+			if endpoint.IsLocal {
+				// For local endpoints check if the path is same
+				// since we have local posix storage instead of rpc
+				if s.xlDisks[i][j].String() != endpoint.Path {
+					continue
+				}
+			} else {
+				// For remote endpoints check for full http path.
+				if s.xlDisks[i][j].String() != endpoint.String() {
+					continue
+				}
 			}
 			return s.xlDisks[i][j].IsOnline()
 		}
