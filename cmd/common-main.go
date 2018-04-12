@@ -68,6 +68,7 @@ func initConfig() {
 		return
 	}
 
+	// Config file does not exist, we create it fresh and return upon success.
 	if isFile(getConfigFile()) {
 		logger.FatalIf(migrateConfig(), "Config migration failed.")
 		logger.FatalIf(loadConfig(), "Unable to load config version: '%s'.", serverConfigVersion)

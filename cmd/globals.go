@@ -26,6 +26,7 @@ import (
 	etcdc "github.com/coreos/etcd/client"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/fatih/color"
+
 	miniohttp "github.com/minio/minio/cmd/http"
 	"github.com/minio/minio/pkg/auth"
 	"github.com/minio/minio/pkg/dns"

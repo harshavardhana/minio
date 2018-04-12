@@ -280,6 +280,7 @@ func (api objectAPIHandlers) ListBucketsHandler(w http.ResponseWriter, r *http.R
 		writeErrorResponse(w, s3Error, r.URL)
 		return
 	}
+
 	// If etcd, dns federation configured list buckets from etcd.
 	var bucketsInfo []BucketInfo
 	if globalDNSConfig != nil {
@@ -414,11 +415,7 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 			deletedObjects = append(deletedObjects, object)
 			continue
 		}
-<<<<<<< HEAD
-		if _, ok := err.(ObjectNotFound); ok {
-=======
 		if _, ok := minioErr.Cause(err).(ObjectNotFound); ok {
->>>>>>> Add functionality to add old buckets to etcd on startup
 			// If the object is not found it should be
 			// accounted as deleted as per S3 spec.
 			deletedObjects = append(deletedObjects, object)

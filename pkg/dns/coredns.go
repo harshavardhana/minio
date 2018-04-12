@@ -51,7 +51,7 @@ func (c *coreDNS) List() ([]SrvRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var srvRecords []SrvRecord
 	for _, n := range r.Node.Nodes {
 		var srvRecord SrvRecord

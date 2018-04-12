@@ -883,6 +883,8 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 		apiErr = ErrObjectTampered
 	case errEncryptedObject:
 		apiErr = ErrSSEEncryptedObject
+	case errInvalidSSEParameters:
+		apiErr = ErrInvalidSSECustomerParameters
 	case errSSEKeyMismatch:
 		apiErr = ErrAccessDenied // no access without correct key
 	case context.Canceled, context.DeadlineExceeded:
