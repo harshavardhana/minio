@@ -59,6 +59,7 @@ func registerDistXLRouters(mux *router.Router, endpoints EndpointList) error {
 
 // List of some generic handlers which are applied for all incoming requests.
 var globalHandlers = []HandlerFunc{
+	// Forward path style requests to actual host in a bucket federated setup
 	setBucketForwardingHandler,
 	// Ratelimit the incoming requests using a token bucket algorithm
 	setRateLimitHandler,

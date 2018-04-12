@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -35,6 +36,7 @@ import (
 	"github.com/minio/minio-go/pkg/policy"
 	"github.com/minio/minio-go/pkg/set"
 	"github.com/minio/minio/cmd/logger"
+	minioErr "github.com/minio/minio/pkg/errors"
 	"github.com/minio/minio/pkg/event"
 	"github.com/minio/minio/pkg/hash"
 )
@@ -45,6 +47,7 @@ func enforceBucketPolicy(ctx context.Context, bucket, action, resource, referer,
 	// Verify if bucket actually exists
 	objAPI := newObjectLayerFn()
 	if err := checkBucketExist(ctx, bucket, objAPI); err != nil {
+		err = minioErr.Cause(err)
 		switch err.(type) {
 		case BucketNameInvalid:
 			// Return error for invalid bucket name.
@@ -105,6 +108,44 @@ func isBucketActionAllowed(action, bucket, prefix string, objectAPI ObjectLayer)
 	var conditionKeyMap map[string]set.StringSet
 	// Validate action, resource and conditions with current policy statements.
 	return bucketPolicyEvalStatements(action, resource, conditionKeyMap, bp.Statements)
+}
+
+// Check if there are buckets on server without corresponding entry in etcd backend and
+// make entries. Here is the general flow
+// - Range over all the available buckets
+// - Check if a bucket has an entry in etcd backend
+// -- If no, make an entry
+// -- If yes, check if the IP of entry matches local IP. This means entry is for this instance.
+// -- If IP of the entry doesn't match, this means entry is for another instance. Log an error to console.
+func initFederatorBackend() {
+	objLayer := newObjectLayerFn()
+	// List all buckets
+	b, err := objLayer.ListBuckets(context.Background())
+	if err != nil {
+		logger.LogIf(context.Background(), err)
+		return
+	}
+	for _, bInfo := range b {
+		go func(bName string) {
+			r, err := globalDNSConfig.Get(bName)
+			if err != nil {
+				if client.IsKeyNotFound(err) {
+					// Make a new entry
+					err = globalDNSConfig.Put(bName)
+					logger.LogIf(context.Background(), err)
+					return
+				}
+				logger.LogIf(context.Background(), err)
+				return
+			}
+			if r.Host != globalDomainIP {
+				// Log error that entry already present for different host
+				err = fmt.Errorf("Unable to add bucket DNS entry for bucket %s, an entry exists for the same key. Use %s to access the bucket, or rename it to a unique value", bName, globalDomainIP)
+				logger.LogIf(context.Background(), err)
+			}
+			return
+		}(bInfo.Name)
+	}
 }
 
 // GetBucketLocationHandler - GET Bucket location.
@@ -374,7 +415,7 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 			deletedObjects = append(deletedObjects, object)
 			continue
 		}
-		if _, ok := err.(ObjectNotFound); ok {
+		if _, ok := minioErr.Cause(err).(ObjectNotFound); ok {
 			// If the object is not found it should be
 			// accounted as deleted as per S3 spec.
 			deletedObjects = append(deletedObjects, object)

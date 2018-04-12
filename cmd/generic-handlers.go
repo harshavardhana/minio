@@ -603,7 +603,14 @@ func (f bucketForwardingHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	bucket, object := urlPath2BucketObjectName(r.URL.Path)
+	// MakeBucket request
 	if r.Method == http.MethodPut && bucket != "" && object == "" {
+		f.handler.ServeHTTP(w, r)
+		return
+	}
+
+	// ListBucket request
+	if r.Method == http.MethodGet && bucket == "" && object == "" {
 		f.handler.ServeHTTP(w, r)
 		return
 	}

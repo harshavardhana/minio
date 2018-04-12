@@ -17,7 +17,9 @@
 package cmd
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -45,12 +47,20 @@ func checkUpdate(mode string) {
 	}
 }
 
+// Initialize and load config from remote etcd or local config directory
 func initConfig() {
 	if globalEtcdClient != nil {
-		if err := loadConfig(); err != nil {
+		kapi := etcdc.NewKeysAPI(globalEtcdClient)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		_, err := kapi.Get(ctx, getConfigFile(), nil)
+		cancel()
+		if err == nil {
+			logger.FatalIf(migrateConfig(), "Config migration failed.")
+			logger.FatalIf(loadConfig(), "Unable to load config version: '%s'.", serverConfigVersion)
+		} else {
 			if etcdc.IsKeyNotFound(err) {
 				logger.FatalIf(newConfig(), "Unable to initialize minio config for the first time.")
-				logger.Info("Created minio configuration file successfully at", globalEtcdClient.Endpoints())
+				log.Println("Created minio configuration file successfully at", globalEtcdClient.Endpoints())
 			} else {
 				logger.FatalIf(err, "Unable to load config version: '%s'.", serverConfigVersion)
 			}
@@ -63,6 +73,7 @@ func initConfig() {
 		logger.FatalIf(migrateConfig(), "Config migration failed.")
 		logger.FatalIf(loadConfig(), "Unable to load config version: '%s'.", serverConfigVersion)
 	} else {
+		// Config file does not exist, we create it fresh and return upon success.
 		logger.FatalIf(newConfig(), "Unable to initialize minio config for the first time.")
 		logger.Info("Created minio configuration file successfully at " + getConfigDir())
 	}
@@ -160,7 +171,7 @@ func handleCommonEnvVars() {
 		globalIsEnvDomainName = true
 	}
 
-	globalDomainIP = os.Getenv("MINIO_DOMAIN_IP")
+	globalDomainIP = os.Getenv("MINIO_PUBLIC_IP")
 	if globalDomainName != "" && globalDomainIP != "" && globalEtcdClient != nil {
 		var err error
 		globalDNSConfig, err = dns.NewCoreDNS(globalDomainName, globalDomainIP, globalMinioPort, globalEtcdClient)
