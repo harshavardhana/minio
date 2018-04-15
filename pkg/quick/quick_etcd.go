@@ -108,6 +108,10 @@ func (d etcdConfig) Load(filename string) error {
 		fileData = strings.Replace(ev.Value, "\r\n", "\n", -1)
 	}
 
+	if err = checkDupJSONKeys(fileData); err != nil {
+		return err
+	}
+
 	// Unmarshal file's content
 	return toUnmarshaller(filepath.Ext(filename))([]byte(fileData), d.data)
 }
