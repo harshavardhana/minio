@@ -538,11 +538,9 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 
 	var objInfo ObjectInfo
 
-	// _, err = objectAPI.GetBucketInfo(ctx, dstBucket)
-	// if err == toObjectErr(errVolumeNotFound, dstBucket) && !cpSrcDstSame
 	if isRemoteCallRequired(ctx, srcBucket, dstBucket, objectAPI) {
 		if globalDNSConfig != nil {
-			if dstRecord, errEtcd := globalDNSConfig.Get(dstBucket); errEtcd == nil {
+			if dstRecords, errEtcd := globalDNSConfig.Get(dstBucket); errEtcd == nil {
 				go func() {
 					if gerr := objectAPI.GetObject(ctx, srcBucket, srcObject, 0, srcInfo.Size, srcInfo.Writer, srcInfo.ETag); gerr != nil {
 						pipeWriter.CloseWithError(gerr)
@@ -553,7 +551,8 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 					defer srcInfo.Writer.Close()
 				}()
 				// Send PutObject request to appropriate instance (in federated deployment)
-				client, rerr := getRemoteInstanceClient(dstRecord[0])
+				host, port := getRandomHostPort(dstRecords)
+				client, rerr := getRemoteInstanceClient(host, port)
 				if rerr != nil {
 					pipeWriter.CloseWithError(rerr)
 					writeErrorResponse(w, ErrInternalError, r.URL)

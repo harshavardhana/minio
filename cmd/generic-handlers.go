@@ -660,9 +660,10 @@ func (f bucketForwardingHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if globalDomainIPs.Intersection(set.CreateStringSet(getHostsSlice(sr)...)).IsEmpty() {
-		backendURL := fmt.Sprintf("http://%s:%d", sr[0].Host, sr[0].Port)
+		host, port := getRandomHostPort(sr)
+		backendURL := fmt.Sprintf("http://%s:%d", host, port)
 		if globalIsSSL {
-			backendURL = fmt.Sprintf("https://%s:%d", sr[0].Host, sr[0].Port)
+			backendURL = fmt.Sprintf("https://%s:%d", host, port)
 		}
 		r.URL, err = url.Parse(backendURL)
 		if err != nil {

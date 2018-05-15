@@ -20,11 +20,13 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"net"
 	"path"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	miniogo "github.com/minio/minio-go"
@@ -283,10 +285,10 @@ func isMinioReservedBucket(bucketName string) bool {
 
 // Returns a minio-go Client configured to access remote host described by destDNSRecord
 // Applicable only in a federated deployment
-func getRemoteInstanceClient(destDNSRecord dns.SrvRecord) (*miniogo.Core, error) {
+func getRemoteInstanceClient(host string, port int) (*miniogo.Core, error) {
 	// In a federated deployment, all the instances share config files and hence expected to have same
 	// credentials. So, access current instances creds and use it to create client for remote instance
-	client, err := miniogo.NewCore(net.JoinHostPort(destDNSRecord.Host, strconv.Itoa(destDNSRecord.Port)), globalServerConfig.Credential.AccessKey, globalServerConfig.Credential.SecretKey, globalIsSSL)
+	client, err := miniogo.NewCore(net.JoinHostPort(host, strconv.Itoa(port)), globalServerConfig.Credential.AccessKey, globalServerConfig.Credential.SecretKey, globalIsSSL)
 	if err != nil {
 		return nil, err
 	}
@@ -313,6 +315,13 @@ func getHostsSlice(records []dns.SrvRecord) []string {
 		hosts = append(hosts, r.Host)
 	}
 	return hosts
+}
+
+// returns a random host (and corresponding port) from a slice of DNS records
+func getRandomHostPort(records []dns.SrvRecord) (string, int) {
+	rand.Seed(time.Now().Unix())
+	srvRecord := records[rand.Intn(len(records))]
+	return srvRecord.Host, srvRecord.Port
 }
 
 // byBucketName is a collection satisfying sort.Interface.
