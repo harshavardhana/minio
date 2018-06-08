@@ -61,7 +61,7 @@ type cacheObjects struct {
 	// file path patterns to exclude from cache
 	exclude []string
 	// Object functions pointing to the corresponding functions of backend implementation.
-	GetObjectFn               func(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
+	GetObjectFn               func(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string, objInfo ObjectInfo) (err error)
 	GetObjectInfoFn           func(ctx context.Context, bucket, object string) (objInfo ObjectInfo, err error)
 	PutObjectFn               func(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error)
 	DeleteObjectFn            func(ctx context.Context, bucket, object string) error
@@ -92,7 +92,7 @@ type CacheObjectLayer interface {
 	ListBuckets(ctx context.Context) (buckets []BucketInfo, err error)
 	DeleteBucket(ctx context.Context, bucket string) error
 	// Object operations.
-	GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
+	GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string, objInfo ObjectInfo) (err error)
 	GetObjectInfo(ctx context.Context, bucket, object string) (objInfo ObjectInfo, err error)
 	PutObject(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error)
 	DeleteObject(ctx context.Context, bucket, object string) error
@@ -181,17 +181,17 @@ func (c cacheObjects) getMetadata(objInfo ObjectInfo) map[string]string {
 
 // Uses cached-object to serve the request. If object is not cached it serves the request from the backend and also
 // stores it in the cache for serving subsequent requests.
-func (c cacheObjects) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error) {
+func (c cacheObjects) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string, objectInfo ObjectInfo) (err error) {
 	GetObjectFn := c.GetObjectFn
 	GetObjectInfoFn := c.GetObjectInfoFn
 
 	if c.isCacheExclude(bucket, object) {
-		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag)
+		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag, objectInfo)
 	}
 	// fetch cacheFSObjects if object is currently cached or nearest available cache drive
 	dcache, err := c.cache.getCachedFSLoc(ctx, bucket, object)
 	if err != nil {
-		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag)
+		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag, objectInfo)
 	}
 	// stat object on backend
 	objInfo, err := GetObjectInfoFn(ctx, bucket, object)
@@ -205,36 +205,36 @@ func (c cacheObjects) GetObject(ctx context.Context, bucket, object string, star
 	}
 
 	if !backendDown && filterFromCache(objInfo.UserDefined) {
-		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag)
+		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag, objInfo)
 	}
 
 	cachedObjInfo, err := dcache.GetObjectInfo(ctx, bucket, object)
 	if err == nil {
 		if backendDown {
 			// If the backend is down, serve the request from cache.
-			return dcache.Get(ctx, bucket, object, startOffset, length, writer, etag)
+			return dcache.Get(ctx, bucket, object, startOffset, length, writer, etag, cachedObjInfo)
 		}
 		if cachedObjInfo.ETag == objInfo.ETag && !isStaleCache(objInfo) {
-			return dcache.Get(ctx, bucket, object, startOffset, length, writer, etag)
+			return dcache.Get(ctx, bucket, object, startOffset, length, writer, etag, cachedObjInfo)
 		}
 		dcache.Delete(ctx, bucket, object)
 	}
 	if startOffset != 0 || length != objInfo.Size {
 		// We don't cache partial objects.
-		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag)
+		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag, objInfo)
 	}
 	if !dcache.diskAvailable(objInfo.Size * cacheSizeMultiplier) {
 		// cache only objects < 1/100th of disk capacity
-		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag)
+		return GetObjectFn(ctx, bucket, object, startOffset, length, writer, etag, objInfo)
 	}
 	// Initialize pipe.
 	pipeReader, pipeWriter := io.Pipe()
-	hashReader, err := hash.NewReader(pipeReader, objInfo.Size, "", "")
+	hashReader, err := hash.NewReader(pipeReader, objInfo.Size, "", "", objInfo.Size)
 	if err != nil {
 		return err
 	}
 	go func() {
-		if err = GetObjectFn(ctx, bucket, object, 0, objInfo.Size, io.MultiWriter(writer, pipeWriter), etag); err != nil {
+		if err = GetObjectFn(ctx, bucket, object, 0, objInfo.Size, io.MultiWriter(writer, pipeWriter), etag, objInfo); err != nil {
 			pipeWriter.CloseWithError(err)
 			return
 		}
@@ -594,13 +594,13 @@ func (c cacheObjects) PutObject(ctx context.Context, bucket, object string, r *h
 	objInfo = ObjectInfo{}
 	// Initialize pipe to stream data to backend
 	pipeReader, pipeWriter := io.Pipe()
-	hashReader, err := hash.NewReader(pipeReader, size, r.MD5HexString(), r.SHA256HexString())
+	hashReader, err := hash.NewReader(pipeReader, size, r.MD5HexString(), r.SHA256HexString(), r.ActualSize())
 	if err != nil {
 		return ObjectInfo{}, err
 	}
 	// Initialize pipe to stream data to cache
 	rPipe, wPipe := io.Pipe()
-	cHashReader, err := hash.NewReader(rPipe, size, r.MD5HexString(), r.SHA256HexString())
+	cHashReader, err := hash.NewReader(rPipe, size, r.MD5HexString(), r.SHA256HexString(), r.ActualSize())
 	if err != nil {
 		return ObjectInfo{}, err
 	}
@@ -687,13 +687,13 @@ func (c cacheObjects) PutObjectPart(ctx context.Context, bucket, object, uploadI
 	info = PartInfo{}
 	// Initialize pipe to stream data to backend
 	pipeReader, pipeWriter := io.Pipe()
-	hashReader, err := hash.NewReader(pipeReader, size, data.MD5HexString(), data.SHA256HexString())
+	hashReader, err := hash.NewReader(pipeReader, size, data.MD5HexString(), data.SHA256HexString(), data.ActualSize())
 	if err != nil {
 		return
 	}
 	// Initialize pipe to stream data to cache
 	rPipe, wPipe := io.Pipe()
-	cHashReader, err := hash.NewReader(rPipe, size, data.MD5HexString(), data.SHA256HexString())
+	cHashReader, err := hash.NewReader(rPipe, size, data.MD5HexString(), data.SHA256HexString(), data.ActualSize())
 	if err != nil {
 		return
 	}
@@ -888,8 +888,8 @@ func newServerCacheObjects(config CacheConfig) (CacheObjectLayer, error) {
 		cache:    dcache,
 		exclude:  config.Exclude,
 		listPool: newTreeWalkPool(globalLookupTimeout),
-		GetObjectFn: func(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) error {
-			return newObjectLayerFn().GetObject(ctx, bucket, object, startOffset, length, writer, etag)
+		GetObjectFn: func(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string, objInfo ObjectInfo) error {
+			return newObjectLayerFn().GetObject(ctx, bucket, object, startOffset, length, writer, etag, objInfo)
 		},
 		GetObjectInfoFn: func(ctx context.Context, bucket, object string) (ObjectInfo, error) {
 			return newObjectLayerFn().GetObjectInfo(ctx, bucket, object)

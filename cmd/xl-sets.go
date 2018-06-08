@@ -560,8 +560,8 @@ func (s *xlSets) ListBuckets(ctx context.Context) (buckets []BucketInfo, err err
 // --- Object Operations ---
 
 // GetObject - reads an object from the hashedSet based on the object name.
-func (s *xlSets) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) error {
-	return s.getHashedSet(object).GetObject(ctx, bucket, object, startOffset, length, writer, etag)
+func (s *xlSets) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string, objInfo ObjectInfo) error {
+	return s.getHashedSet(object).GetObject(ctx, bucket, object, startOffset, length, writer, etag, objInfo)
 }
 
 // PutObject - writes an object to hashedSet based on the object name.
@@ -822,7 +822,7 @@ func (s *xlSets) CopyObjectPart(ctx context.Context, srcBucket, srcObject, destB
 	destSet := s.getHashedSet(destObject)
 
 	go func() {
-		if gerr := srcSet.GetObject(ctx, srcBucket, srcObject, startOffset, length, srcInfo.Writer, srcInfo.ETag); gerr != nil {
+		if gerr := srcSet.GetObject(ctx, srcBucket, srcObject, startOffset, length, srcInfo.Writer, srcInfo.ETag, srcInfo); gerr != nil {
 			if gerr = srcInfo.Writer.Close(); gerr != nil {
 				logger.LogIf(ctx, gerr)
 				return

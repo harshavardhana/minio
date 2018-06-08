@@ -89,7 +89,8 @@ func writeDataBlocks(ctx context.Context, dst io.Writer, enBlocks [][]byte, data
 		}
 		// Copy the block.
 		n, err := io.Copy(dst, bytes.NewReader(block))
-		if err != nil {
+		// Range based multipart queries may close the writer pipe after the copy is done.
+		if err != nil && err != io.ErrClosedPipe {
 			logger.LogIf(ctx, err)
 			return 0, err
 		}

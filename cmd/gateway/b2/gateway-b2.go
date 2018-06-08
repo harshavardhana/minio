@@ -400,7 +400,7 @@ func (l *b2Objects) ListObjectsV2(ctx context.Context, bucket, prefix, continuat
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (l *b2Objects) GetObject(ctx context.Context, bucket string, object string, startOffset int64, length int64, writer io.Writer, etag string) error {
+func (l *b2Objects) GetObject(ctx context.Context, bucket string, object string, startOffset int64, length int64, writer io.Writer, etag string, objInfo minio.ObjectInfo) error {
 	bkt, err := l.Bucket(ctx, bucket)
 	if err != nil {
 		return err

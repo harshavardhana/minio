@@ -635,7 +635,7 @@ func (web *webAPIHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashReader, err := hash.NewReader(r.Body, size, "", "")
+	hashReader, err := hash.NewReader(r.Body, size, "", "", size)
 	if err != nil {
 		writeWebErrorResponse(w, err)
 		return
@@ -698,7 +698,17 @@ func (web *webAPIHandlers) Download(w http.ResponseWriter, r *http.Request) {
 	// Add content disposition.
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", path.Base(object)))
 
-	if err := getObject(context.Background(), bucket, object, 0, -1, w, ""); err != nil {
+	getObjectInfo := objectAPI.GetObjectInfo
+	if web.CacheAPI() != nil {
+		getObjectInfo = web.CacheAPI().GetObjectInfo
+	}
+
+	objInfo, err := getObjectInfo(context.Background(), bucket, object)
+	if err != nil {
+		return
+	}
+
+	if err := getObject(context.Background(), bucket, object, 0, -1, w, "", objInfo); err != nil {
 		/// No need to print error, response writer already written to.
 		return
 	}
@@ -779,7 +789,7 @@ func (web *webAPIHandlers) DownloadZip(w http.ResponseWriter, r *http.Request) {
 				writeWebErrorResponse(w, errUnexpected)
 				return err
 			}
-			return getObject(context.Background(), args.BucketName, objectName, 0, info.Size, writer, "")
+			return getObject(context.Background(), args.BucketName, objectName, 0, info.Size, writer, "", info)
 		}
 
 		if !hasSuffix(object, slashSeparator) {

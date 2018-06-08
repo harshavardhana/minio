@@ -431,7 +431,7 @@ func (s *siaObjects) ListObjects(ctx context.Context, bucket string, prefix stri
 	return loi, nil
 }
 
-func (s *siaObjects) GetObject(ctx context.Context, bucket string, object string, startOffset int64, length int64, writer io.Writer, etag string) error {
+func (s *siaObjects) GetObject(ctx context.Context, bucket string, object string, startOffset int64, length int64, writer io.Writer, etag string, objInfo minio.ObjectInfo) error {
 	dstFile := path.Join(s.TempDir, minio.MustGetUUID())
 	defer os.Remove(dstFile)
 

@@ -35,6 +35,7 @@ var errNestedReader = errors.New("Nesting of Reader detected, not allowed")
 type Reader struct {
 	src  io.Reader
 	size int64
+	actualSize int64
 
 	md5sum, sha256sum   []byte // Byte values of md5sum, sha256sum of client sent values.
 	md5Hash, sha256Hash hash.Hash
@@ -42,7 +43,7 @@ type Reader struct {
 
 // NewReader returns a new hash Reader which computes the MD5 sum and
 // SHA256 sum (if set) of the provided io.Reader at EOF.
-func NewReader(src io.Reader, size int64, md5Hex, sha256Hex string) (*Reader, error) {
+func NewReader(src io.Reader, size int64, md5Hex, sha256Hex string, actualSize int64) (*Reader, error) {
 	if _, ok := src.(*Reader); ok {
 		return nil, errNestedReader
 	}
@@ -71,6 +72,7 @@ func NewReader(src io.Reader, size int64, md5Hex, sha256Hex string) (*Reader, er
 		size:       size,
 		md5Hash:    md5.New(),
 		sha256Hash: sha256Hash,
+		actualSize: actualSize,
 	}, nil
 }
 
@@ -97,6 +99,10 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 // will return during reading. It returns -1 for unlimited
 // data.
 func (r *Reader) Size() int64 { return r.size }
+
+// ActualSize returns the pre-modified size of the object.
+// DecompressedSize - For compressed objects.
+func (r *Reader) ActualSize() int64 { return r.actualSize }
 
 // MD5 - returns byte md5 value
 func (r *Reader) MD5() []byte {

@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -294,6 +295,30 @@ func getRandomHostPort(records []dns.SrvRecord) (string, int) {
 	rand.Seed(time.Now().Unix())
 	srvRecord := records[rand.Intn(len(records))]
 	return srvRecord.Host, srvRecord.Port
+}
+
+// Returns true if the object is compressed.
+func isCompressed(metadata map[string]string) bool {
+	_, ok := metadata[ReservedMetadataPrefix+"compression"]
+	return ok
+}
+
+func getDecompressedSize(objInfo ObjectInfo) int64 {
+	metadata := objInfo.UserDefined
+	sizeStr, ok := metadata[ReservedMetadataPrefix+"actualSize"]
+	if ok {
+		size, err := strconv.ParseInt(sizeStr, 10, 64)
+		if err == nil {
+			return size
+		}
+	} else {
+		var totalPartSize int64
+		for _, part := range objInfo.Parts {
+			totalPartSize += part.ActualSize
+		}
+		return totalPartSize
+	}
+	return 0
 }
 
 // byBucketName is a collection satisfying sort.Interface.

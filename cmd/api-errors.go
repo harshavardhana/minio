@@ -127,6 +127,8 @@ const (
 	ErrMaximumExpires
 	ErrSlowDown
 	ErrInvalidPrefixMarker
+	ErrIncorrectContinuationToken
+
 	// Add new error codes here.
 
 	// Server-Side-Encryption (with Customer provided key) related API errors.
@@ -174,6 +176,8 @@ const (
 	// Minio storage class error codes
 	ErrInvalidStorageClass
 	ErrBackendDown
+	ErrInvalidDecompressedSize
+
 	// Add new extended error codes here.
 	// Please open a https://github.com/minio/minio/issues before adding
 	// new error codes here.
@@ -193,7 +197,6 @@ const (
 	ErrHealMissingBucket
 	ErrHealAlreadyRunning
 	ErrHealOverlappingPaths
-	ErrIncorrectContinuationToken
 )
 
 // error code to APIError structure, these fields carry respective
@@ -541,6 +544,16 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "Invalid marker prefix combination",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
+	ErrIncorrectContinuationToken: {
+		Code:           "InvalidArgument",
+		Description:    "The continuation token provided is incorrect",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrMaximumExpires: {
+		Code:           "AuthorizationQueryParametersError",
+		Description:    "X-Amz-Expires must be less than a week (in seconds); that is, the given X-Amz-Expires must be less than 604800 seconds",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
 
 	// FIXME: Actual XML error response also contains the header which missed in list of signed header parameters.
 	ErrUnsignedHeaders: {
@@ -795,11 +808,6 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    errObjectTampered.Error(),
 		HTTPStatusCode: http.StatusPartialContent,
 	},
-	ErrMaximumExpires: {
-		Code:           "AuthorizationQueryParametersError",
-		Description:    "X-Amz-Expires must be less than a week (in seconds); that is, the given X-Amz-Expires must be less than 604800 seconds",
-		HTTPStatusCode: http.StatusBadRequest,
-	},
 	// Generic Invalid-Request error. Should be used for response errors only for unlikely
 	// corner case errors for which introducing new APIErrorCode is not worth it. LogIf()
 	// should be used to log the error at the source of the error for debugging purposes.
@@ -843,9 +851,9 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "Object storage backend is unreachable",
 		HTTPStatusCode: http.StatusServiceUnavailable,
 	},
-	ErrIncorrectContinuationToken: {
-		Code:           "InvalidArgument",
-		Description:    "The continuation token provided is incorrect",
+	ErrInvalidDecompressedSize: {
+		Code:           "XMinioInvalidDecompressedSize",
+		Description:    "The data provided is unfit for decompression",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
 	// Add your error structure here.

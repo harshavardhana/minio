@@ -260,6 +260,16 @@ type PartInfo struct {
 	Size int64
 }
 
+// PartInfo - represents individual part metadata.
+type CompressPartInfo struct {
+	// Part number that identifies the part. This is a positive integer between
+	// 1 and 10,000.
+	PartNumber int
+
+	// Decompressed Part Size.
+	ActualSize int64
+}
+
 // MultipartInfo - represents metadata in progress multipart upload.
 type MultipartInfo struct {
 	// Object name for which the multipart upload was initiated.

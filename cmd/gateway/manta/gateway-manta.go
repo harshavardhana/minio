@@ -504,7 +504,7 @@ func (t *tritonObjects) ListObjectsV2(ctx context.Context, bucket, prefix, conti
 // indicates the total length of the object.
 //
 // https://apidocs.joyent.com/manta/api.html#GetObject
-func (t *tritonObjects) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) error {
+func (t *tritonObjects) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string, objInfo minio.ObjectInfo) error {
 	// Start offset cannot be negative.
 	if startOffset < 0 {
 		logger.LogIf(ctx, fmt.Errorf("Unexpected error"))
