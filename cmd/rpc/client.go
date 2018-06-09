@@ -18,17 +18,13 @@ package rpc
 
 import (
 	"bytes"
-	"context"
-	"crypto/tls"
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"reflect"
 	"time"
 
-	xhttp "github.com/minio/minio/cmd/http"
 	xnet "github.com/minio/minio/pkg/net"
 )
 
@@ -90,38 +86,11 @@ func (client *Client) Close() error {
 	return nil
 }
 
-func newCustomDialContext(timeout time.Duration) func(ctx context.Context, network, addr string) (net.Conn, error) {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		dialer := &net.Dialer{
-			Timeout:   timeout,
-			KeepAlive: timeout,
-			DualStack: true,
-		}
-
-		conn, err := dialer.DialContext(ctx, network, addr)
-		if err != nil {
-			return nil, err
-		}
-
-		return xhttp.NewTimeoutConn(conn, timeout, timeout), nil
-	}
-}
-
 // NewClient - returns new RPC client.
-func NewClient(serviceURL *xnet.URL, tlsConfig *tls.Config, timeout time.Duration) *Client {
+func NewClient(serviceURL *xnet.URL, transport http.RoundTripper) *Client {
 	return &Client{
 		httpClient: &http.Client{
-			// Transport is exactly same as Go default in https://golang.org/pkg/net/http/#RoundTripper
-			// except custom DialContext and TLSClientConfig.
-			Transport: &http.Transport{
-				Proxy:                 http.ProxyFromEnvironment,
-				DialContext:           newCustomDialContext(timeout),
-				MaxIdleConns:          100,
-				IdleConnTimeout:       90 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-				TLSClientConfig:       tlsConfig,
-			},
+			Transport: transport,
 		},
 		serviceURL: serviceURL,
 	}

@@ -39,7 +39,7 @@ func TestClientCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
-	rpcClient := NewClient(url, nil, DefaultRPCTimeout)
+	rpcClient := NewClient(url, http.DefaultTransport)
 
 	var reply int
 	var boolReply bool

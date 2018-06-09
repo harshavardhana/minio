@@ -156,7 +156,7 @@ func handleCommonEnvVars() {
 		var err error
 		globalEtcdClient, err = etcd.New(etcd.Config{
 			Endpoints: etcdEndpoints,
-			Transport: NewCustomHTTPTransport(),
+			Transport: DefaultTransport,
 		})
 		logger.FatalIf(err, "Unable to initialize etcd with %s", etcdEndpoints)
 	}

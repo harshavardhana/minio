@@ -219,7 +219,7 @@ func (g *Manta) NewGatewayLayer(creds auth.Credentials) (minio.ObjectLayer, erro
 	}
 
 	tc.Client.HTTPClient = &http.Client{
-		Transport: minio.NewCustomHTTPTransport(),
+		Transport: minio.DefaultTransport,
 	}
 
 	return &tritonObjects{

@@ -19,7 +19,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
@@ -252,27 +251,6 @@ func ToS3ETag(etag string) string {
 	}
 
 	return etag
-}
-
-// NewCustomHTTPTransport returns a new http configuration
-// used while communicating with the cloud backends.
-// This sets the value for MaxIdleConnsPerHost from 2 (go default)
-// to 100.
-func NewCustomHTTPTransport() *http.Transport {
-	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		MaxIdleConns:          1024,
-		MaxIdleConnsPerHost:   1024,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: globalRootCAs},
-		DisableCompression:    true,
-	}
 }
 
 // Load the json (typically from disk file).

@@ -17,7 +17,6 @@
 package cmd
 
 import (
-	"crypto/tls"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -135,7 +134,6 @@ func TestRPCClientArgsValidate(t *testing.T) {
 		RPCVersion:       globalRPCAPIVersion,
 		ServiceName:      "Arith",
 		ServiceURL:       case1URL,
-		TLSConfig:        nil,
 	}
 
 	case2URL, err := xnet.ParseURL("https://localhost:12345/rpc")
@@ -147,7 +145,6 @@ func TestRPCClientArgsValidate(t *testing.T) {
 		RPCVersion:       globalRPCAPIVersion,
 		ServiceName:      "Arith",
 		ServiceURL:       case1URL,
-		TLSConfig:        &tls.Config{},
 	}
 
 	case3Args := RPCClientArgs{
@@ -155,14 +152,12 @@ func TestRPCClientArgsValidate(t *testing.T) {
 		RPCVersion:       globalRPCAPIVersion,
 		ServiceName:      "Arith",
 		ServiceURL:       case1URL,
-		TLSConfig:        &tls.Config{},
 	}
 
 	case4Args := RPCClientArgs{
 		NewAuthTokenFunc: newAuthToken,
 		RPCVersion:       globalRPCAPIVersion,
 		ServiceURL:       case1URL,
-		TLSConfig:        &tls.Config{},
 	}
 
 	case5URL, err := xnet.ParseURL("ftp://localhost:12345/rpc")
@@ -174,7 +169,6 @@ func TestRPCClientArgsValidate(t *testing.T) {
 		RPCVersion:       globalRPCAPIVersion,
 		ServiceName:      "Arith",
 		ServiceURL:       case5URL,
-		TLSConfig:        &tls.Config{},
 	}
 
 	case6URL, err := xnet.ParseURL("http://localhost:12345/rpc?location")
@@ -186,7 +180,6 @@ func TestRPCClientArgsValidate(t *testing.T) {
 		RPCVersion:       globalRPCAPIVersion,
 		ServiceName:      "Arith",
 		ServiceURL:       case6URL,
-		TLSConfig:        &tls.Config{},
 	}
 
 	case7Args := RPCClientArgs{
@@ -194,7 +187,6 @@ func TestRPCClientArgsValidate(t *testing.T) {
 		RPCVersion:       globalRPCAPIVersion,
 		ServiceName:      "Arith",
 		ServiceURL:       case2URL,
-		TLSConfig:        nil,
 	}
 
 	testCases := []struct {

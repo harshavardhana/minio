@@ -17,7 +17,6 @@
 package cmd
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/url"
@@ -127,7 +126,6 @@ type RPCClientArgs struct {
 	RPCVersion       RPCVersion
 	ServiceName      string
 	ServiceURL       *xnet.URL
-	TLSConfig        *tls.Config
 }
 
 // validate - checks whether given args are valid or not.
@@ -148,7 +146,7 @@ func (args RPCClientArgs) validate() error {
 		return fmt.Errorf("unknown RPC URL %v", args.ServiceURL)
 	}
 
-	if args.ServiceURL.Scheme == "https" && args.TLSConfig == nil {
+	if args.ServiceURL.Scheme == "https" && globalTLSCerts == nil {
 		return fmt.Errorf("tls configuration must not be empty for https url %v", args.ServiceURL)
 	}
 
@@ -196,7 +194,7 @@ func (client *RPCClient) Call(serviceMethod string, args interface {
 		return client.rpcClient.Call(serviceMethod, args, reply)
 	}
 
-	call := func() error {
+	call := func() (err error) {
 		err = lockedCall()
 
 		if err == errRPCRetry {
@@ -252,6 +250,6 @@ func NewRPCClient(args RPCClientArgs) (*RPCClient, error) {
 	return &RPCClient{
 		args:      args,
 		authToken: args.NewAuthTokenFunc(),
-		rpcClient: xrpc.NewClient(args.ServiceURL, args.TLSConfig, xrpc.DefaultRPCTimeout),
+		rpcClient: xrpc.NewClient(args.ServiceURL, DefaultTransport),
 	}, nil
 }

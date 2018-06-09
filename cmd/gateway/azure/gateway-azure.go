@@ -163,7 +163,7 @@ func (g *Azure) NewGatewayLayer(creds auth.Credentials) (minio.ObjectLayer, erro
 		return &azureObjects{}, err
 	}
 	c.AddToUserAgent(fmt.Sprintf("APN/1.0 Minio/1.0 Minio/%s", minio.Version))
-	c.HTTPClient = &http.Client{Transport: minio.NewCustomHTTPTransport()}
+	c.HTTPClient = &http.Client{Transport: minio.DefaultTransport}
 
 	return &azureObjects{
 		client: c.GetBlobService(),

@@ -115,7 +115,7 @@ func (g *B2) Name() string {
 // talk to B2 remote backend.
 func (g *B2) NewGatewayLayer(creds auth.Credentials) (minio.ObjectLayer, error) {
 	ctx := context.Background()
-	client, err := b2.AuthorizeAccount(ctx, creds.AccessKey, creds.SecretKey, b2.Transport(minio.NewCustomHTTPTransport()))
+	client, err := b2.AuthorizeAccount(ctx, creds.AccessKey, creds.SecretKey, b2.Transport(minio.DefaultTransport))
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (l *b2Objects) MakeBucketWithLocation(ctx context.Context, bucket, location
 }
 
 func (l *b2Objects) reAuthorizeAccount(ctx context.Context) error {
-	client, err := b2.AuthorizeAccount(l.ctx, l.creds.AccessKey, l.creds.SecretKey, b2.Transport(minio.NewCustomHTTPTransport()))
+	client, err := b2.AuthorizeAccount(l.ctx, l.creds.AccessKey, l.creds.SecretKey, b2.Transport(minio.DefaultTransport))
 	if err != nil {
 		return err
 	}
