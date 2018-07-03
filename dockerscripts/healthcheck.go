@@ -1,3 +1,5 @@
+// +build ignore
+
 /*
  * MinIO Cloud Storage, (C) 2019 MinIO, Inc.
  *
