@@ -258,15 +258,8 @@ type PartInfo struct {
 
 	// Size in bytes of the part.
 	Size int64
-}
 
-// PartInfo - represents individual part metadata.
-type CompressPartInfo struct {
-	// Part number that identifies the part. This is a positive integer between
-	// 1 and 10,000.
-	PartNumber int
-
-	// Decompressed Part Size.
+	// Actual size in bytes.
 	ActualSize int64
 }
 

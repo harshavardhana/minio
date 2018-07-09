@@ -870,7 +870,7 @@ func (s *posix) createFile(volume, path string) (f *os.File, err error) {
 // Currently we use fallocate when available to avoid disk fragmentation as much as possible
 func (s *posix) PrepareFile(volume, path string, fileSize int64) (err error) {
 	// It doesn't make sense to create a negative-sized file
-	if fileSize < -1 {
+	if fileSize < 0 {
 		return errInvalidArgument
 	}
 
@@ -898,7 +898,7 @@ func (s *posix) PrepareFile(volume, path string, fileSize int64) (err error) {
 	// Close upon return.
 	defer w.Close()
 
-	var e error = nil
+	var e error
 	if fileSize > 0 {
 		// Allocate needed disk space to append data
 		e = Fallocate(int(w.Fd()), 0, fileSize)

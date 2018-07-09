@@ -75,9 +75,8 @@ type FSObjects struct {
 // Represents the background append file.
 type fsAppendFile struct {
 	sync.Mutex
-	parts         []PartInfo // List of parts appended.
-	compressParts []CompressPartInfo
-	filePath      string // Absolute path of the file in the temp location.
+	parts    []PartInfo // List of parts appended.
+	filePath string     // Absolute path of the file in the temp location.
 }
 
 // Initializes meta volume on all the fs path.
@@ -539,49 +538,6 @@ func (fs *FSObjects) GetObject(ctx context.Context, bucket, object string, offse
 		return err
 	}
 	defer objectLock.RUnlock()
-
-	if !isCompressed(objInfo.UserDefined) {
-		return fs.getObject(ctx, bucket, object, offset, length, writer, etag, true)
-	}
-
-	// Preserving the read-write rule.
-	// The read operation is blocked if changes in the decompressedSize is detected.
-	// Allowing this will cause data corruption , as the data is changed during the run.
-	modObjInfo, err := fs.getObjectInfo(ctx, bucket, object)
-	if err != nil {
-		logger.LogIf(ctx, err)
-		return err
-	}
-	// Check whether the decompressed size is changed.
-	compressSizeModified := func(objInfo ObjectInfo, modObjInfo ObjectInfo) bool {
-		if len(objInfo.Parts) == 0 && len(modObjInfo.Parts) == 0 {
-			objDecompressedSize := getDecompressedSize(objInfo)
-			modDecompressedSize := getDecompressedSize(modObjInfo)
-			if objDecompressedSize > 0 || modDecompressedSize > 0 {
-				if objDecompressedSize != modDecompressedSize {
-					return true
-				}
-			}
-		} else if len(objInfo.Parts) > 0 && len(modObjInfo.Parts) > 0 {
-			for i, part := range objInfo.Parts {
-				if part.ActualSize != modObjInfo.Parts[i].ActualSize {
-					return true
-				}
-			}
-		} else {
-			// An object might be initially uploaded as parts and then could have uploaded normally.
-			// And vice-versa applies.
-			return true
-		}
-		return false
-	}(objInfo, modObjInfo)
-
-	// If changed, reply back with errReadBlock error.
-	// ToDo - respond with a retry http status code thus making the http client retry.
-	if compressSizeModified {
-		logger.LogIf(ctx, errReadBlock)
-		return toObjectErr(errReadBlock)
-	}
 
 	return fs.getObject(ctx, bucket, object, offset, length, writer, etag, true)
 }

@@ -918,11 +918,14 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 	storageInfo := objectAPI.StorageInfo(context.Background())
 
 	// Disabling compression for encrypted enabled requests.
-	// Using compression and encryption together enables room for side channel attacks.
+	// Using compression and encryption together enables room for
+	// side channel attacks -
+	// https://en.wikipedia.org/wiki/CRIME
+	// https://en.wikipedia.org/wiki/BREACH_(security_exploit)
 	if !hasSSECustomerHeader(r.Header) && storageInfo.Backend.Type != Unknown {
-		// Storing the compression metadata.
-		metadata[ReservedMetadataPrefix+"compression"] = compressionAlgorithm
-		metadata[ReservedMetadataPrefix+"actualSize"] = strconv.FormatInt(size, 10)
+		// Storing the compression metadata, currently only save
+		// compression algorithm
+		metadata[ReservedMetadataPrefix+"Compression"] = compressionAlgorithm
 
 		rd, wt := io.Pipe()
 		snappyWriter := snappy.NewWriter(wt)
