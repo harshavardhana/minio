@@ -37,6 +37,7 @@ import (
 	"github.com/minio/minio/cmd/logger"
 	"github.com/minio/minio/pkg/disk"
 	"github.com/minio/minio/pkg/mountinfo"
+	"github.com/ncw/directio"
 )
 
 const (
@@ -181,7 +182,7 @@ func newPosix(path string) (*posix, error) {
 		// 1MiB buffer pool for posix internal operations.
 		pool: sync.Pool{
 			New: func() interface{} {
-				b := make([]byte, readSizeV1)
+				b := directio.AlignedBlock(readSizeV1)
 				return &b
 			},
 		},
@@ -767,6 +768,7 @@ func (s *posix) ReadFile(volume, path string, offset int64, buffer []byte, verif
 	if err != nil {
 		return 0, err
 	}
+
 	// Stat a volume entry.
 	_, err = os.Stat((volumeDir))
 	if err != nil {
@@ -785,7 +787,12 @@ func (s *posix) ReadFile(volume, path string, offset int64, buffer []byte, verif
 	}
 
 	// Open the file for reading.
-	file, err := os.Open((filePath))
+	var file *os.File
+	if verifier != nil {
+		file, err = directio.OpenFile(filePath, os.O_RDONLY, 0666)
+	} else {
+		file, err = os.Open(filePath)
+	}
 	if err != nil {
 		switch {
 		case os.IsNotExist(err):
@@ -896,7 +903,7 @@ func (s *posix) createFile(volume, path string) (f *os.File, err error) {
 		}
 	}
 
-	w, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	w, err := directio.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	if err != nil {
 		// File path cannot be verified since one of the parents is a file.
 		switch {

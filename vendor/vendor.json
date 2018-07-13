@@ -747,6 +747,12 @@
 			"revisionTime": "2016-09-27T04:49:45Z"
 		},
 		{
+			"checksumSHA1": "GWw7M/TPuT2Ul2fC5RDIMWEkbtw=",
+			"path": "github.com/ncw/directio",
+			"revision": "17018d97cb6f2cd62f84c69903d327e596b7a93e",
+			"revisionTime": "2017-06-29T08:19:26Z"
+		},
+		{
 			"checksumSHA1": "xCv4GBFyw07vZkVtKF/XrUnkHRk=",
 			"path": "github.com/pkg/errors",
 			"revision": "e881fd58d78e04cf6d0de1217f8707c8cc2249bc",
