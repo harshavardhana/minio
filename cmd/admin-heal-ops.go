@@ -738,6 +738,7 @@ func (h *healSequence) healBucket(bucket string) error {
 		// Heal numCPU * nodes objects at a time.
 		objectInfos, err := objectAPI.ListObjectsHeal(h.ctx, bucket,
 			h.objPrefix, marker, "", entries)
+		logger.LogIf(h.ctx, fmt.Errorf("Error: %s, prefix:%s, marker:%s, count:%d", err, h.objPrefix, marker, entries))
 		if err != nil {
 			return errFnHealFromAPIErr(h.ctx, err)
 		}

@@ -103,9 +103,9 @@ func NewClient(url *url.URL, tlsConfig *tls.Config, timeout time.Duration, newAu
 		DialContext:           newCustomDialContext(timeout),
 		MaxIdleConnsPerHost:   4096,
 		MaxIdleConns:          4096,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+		IdleConnTimeout:       120 * time.Second,
+		TLSHandshakeTimeout:   90 * time.Second,
+		ExpectContinueTimeout: 5 * time.Second,
 		TLSClientConfig:       tlsConfig,
 		DisableCompression:    true,
 	}

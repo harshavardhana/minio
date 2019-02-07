@@ -1396,6 +1396,7 @@ func listDirSetsHealFactory(isLeaf isLeafFunc, sets ...[]StorageAPI) listDirFunc
 		for _, disks := range sets {
 			entries := listDirInternal(bucket, prefixDir, prefixEntry, disks)
 
+			logger.LogIf(context.Background(), fmt.Errorf("prefixDir:%s, prefixEntry:%s", prefixDir, prefixEntry))
 			var newEntries []string
 			// Find elements in entries which are not in mergedEntries
 			for _, entry := range entries {

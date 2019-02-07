@@ -18,8 +18,11 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/minio/minio/cmd/logger"
 )
 
 // Tree walk result carries results of tree walking.
@@ -247,6 +250,7 @@ func startTreeWalk(ctx context.Context, bucket, prefix, marker string, recursive
 		entryPrefixMatch = prefix[lastIndex+1:]
 		prefixDir = prefix[:lastIndex+1]
 	}
+	logger.LogIf(ctx, fmt.Errorf("prefix:%s, prefixDir:%s, marker:%s, count:%d", prefix, prefixDir, marker, maxObjectList))
 	marker = strings.TrimPrefix(marker, prefixDir)
 	go func() {
 		isEnd := true // Indication to start walking the tree with end as true.

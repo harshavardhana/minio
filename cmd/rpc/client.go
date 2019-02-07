@@ -36,8 +36,9 @@ const DefaultRPCTimeout = 1 * time.Minute
 
 // Client - http based RPC client.
 type Client struct {
-	httpClient *http.Client
-	serviceURL *xnet.URL
+	httpClient          *http.Client
+	httpIdleConnsCloser func()
+	serviceURL          *xnet.URL
 }
 
 // Call - calls service method on RPC server.
@@ -87,8 +88,11 @@ func (client *Client) Call(serviceMethod string, args, reply interface{}) error 
 	return gobDecode(callResponse.ReplyBytes, reply)
 }
 
-// Close - does nothing and presents for interface compatibility.
+// Close - closes any idle connections.
 func (client *Client) Close() error {
+	if client.httpIdleConnsCloser != nil {
+		client.httpIdleConnsCloser()
+	}
 	return nil
 }
 
@@ -111,22 +115,24 @@ func newCustomDialContext(timeout time.Duration) func(ctx context.Context, netwo
 
 // NewClient - returns new RPC client.
 func NewClient(serviceURL *xnet.URL, tlsConfig *tls.Config, timeout time.Duration) *Client {
+	// Transport is exactly same as Go default in https://golang.org/pkg/net/http/#RoundTripper
+	// except custom DialContext and TLSClientConfig.
+	tr := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           newCustomDialContext(timeout),
+		MaxIdleConnsPerHost:   4096,
+		MaxIdleConns:          4096,
+		IdleConnTimeout:       120 * time.Second,
+		TLSHandshakeTimeout:   90 * time.Second,
+		ExpectContinueTimeout: 5 * time.Second,
+		TLSClientConfig:       tlsConfig,
+		DisableCompression:    true,
+	}
 	return &Client{
 		httpClient: &http.Client{
-			// Transport is exactly same as Go default in https://golang.org/pkg/net/http/#RoundTripper
-			// except custom DialContext and TLSClientConfig.
-			Transport: &http.Transport{
-				Proxy:                 http.ProxyFromEnvironment,
-				DialContext:           newCustomDialContext(timeout),
-				MaxIdleConnsPerHost:   4096,
-				MaxIdleConns:          4096,
-				IdleConnTimeout:       90 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-				TLSClientConfig:       tlsConfig,
-				DisableCompression:    true,
-			},
+			Transport: tr,
 		},
-		serviceURL: serviceURL,
+		httpIdleConnsCloser: tr.CloseIdleConnections,
+		serviceURL:          serviceURL,
 	}
 }
