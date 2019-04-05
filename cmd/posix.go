@@ -19,6 +19,7 @@ package cmd
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -73,7 +74,6 @@ type posix struct {
 	connected bool
 
 	diskMount bool // indicates if the path is an actual mount.
-	driveSync bool // indicates if the backend is synchronous.
 
 	diskFileInfo os.FileInfo
 	// Disk usage metrics
@@ -197,15 +197,6 @@ func newPosix(path string) (*posix, error) {
 		stopUsageCh:  make(chan struct{}),
 		diskFileInfo: fi,
 		diskMount:    mountinfo.IsLikelyMountPoint(path),
-	}
-
-	var pf BoolFlag
-	if driveSync := os.Getenv("MINIO_DRIVE_SYNC"); driveSync != "" {
-		pf, err = ParseBoolFlag(driveSync)
-		if err != nil {
-			return nil, err
-		}
-		p.driveSync = bool(pf)
 	}
 
 	if !p.diskMount {
@@ -1079,6 +1070,9 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 
 	w, err := disk.OpenFileDirectIO(filePath, os.O_CREATE|os.O_WRONLY|os.O_EXCL|os.O_SYNC, 0666)
 	if err != nil {
+		fmt.Println("disk.OpenFileDirectIO", filePath, err)
+	}
+	if err != nil {
 		switch {
 		case os.IsPermission(err):
 			return errFileAccessDenied
@@ -1096,6 +1090,9 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 	if fileSize > 0 {
 		// Allocate needed disk space to append data
 		e = Fallocate(int(w.Fd()), 0, fileSize)
+		if e != nil {
+			fmt.Println("Fallocate", filePath, e)
+		}
 	}
 
 	// Ignore errors when Fallocate is not supported in the current system
@@ -1127,6 +1124,9 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 		}
 		n, err = w.Write(buf)
 		if err != nil {
+			fmt.Println("w.Write(buf)", filePath, err)
+		}
+		if err != nil {
 			return err
 		}
 		written += int64(n)
@@ -1147,6 +1147,9 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 			var n int
 			n, err = w.Write(remainingAlignedBuf)
 			if err != nil {
+				fmt.Println("w.Write(remainingAlignedBuf)", filePath, err)
+			}
+			if err != nil {
 				return err
 			}
 			written += int64(n)
@@ -1158,6 +1161,9 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 				return err
 			}
 			n, err = w.Write(remainingUnalignedBuf)
+			if err != nil {
+				fmt.Println("w.Write(remainingUnalignedBuf)", filePath, err)
+			}
 			if err != nil {
 				return err
 			}
@@ -1221,13 +1227,9 @@ func (s *posix) AppendFile(volume, path string, buf []byte) (err error) {
 	}
 
 	var w *os.File
-	// Create file if not found, additionally also enables synchronous
-	// operation if asked by the user.
-	if s.driveSync {
-		w, err = s.openFile(volume, path, os.O_CREATE|os.O_SYNC|os.O_APPEND|os.O_WRONLY)
-	} else {
-		w, err = s.openFile(volume, path, os.O_CREATE|os.O_APPEND|os.O_WRONLY)
-	}
+	// Create file if not found. Not doing O_DIRECT here to avoid the code that does buffer aligned writes.
+	// AppendFile() is only used by healing code to heal objects written in old format.
+	w, err = s.openFile(volume, path, os.O_CREATE|os.O_SYNC|os.O_APPEND|os.O_WRONLY)
 	if err != nil {
 		return err
 	}
