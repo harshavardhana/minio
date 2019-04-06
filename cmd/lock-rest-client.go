@@ -303,13 +303,13 @@ func newlockRESTClient(peer *xnet.Host) (*lockRESTClient, error) {
 		tlsConfig = &tls.Config{
 			ServerName: peer.Name,
 			RootCAs:    globalRootCAs,
+			NextProtos: []string{"http/1.1"},
 		}
 	}
 
 	restClient, err := rest.NewClient(serverURL, tlsConfig, rest.DefaultRESTTimeout, newAuthToken)
-
 	if err != nil {
-		return &lockRESTClient{serverURL: serverURL, host: peer, restClient: restClient, connected: false}, err
+		return nil, err
 	}
 
 	return &lockRESTClient{serverURL: serverURL, host: peer, restClient: restClient, connected: true}, nil

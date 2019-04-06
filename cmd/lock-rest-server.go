@@ -35,10 +35,10 @@ const (
 	lockServiceSubPath = "/lock"
 
 	// Lock maintenance interval.
-	lockMaintenanceInterval = 1 * time.Minute
+	lockMaintenanceInterval = 2 * time.Minute
 
 	// Lock validity check interval.
-	lockValidityCheckInterval = 2 * time.Minute
+	lockValidityCheckInterval = 5 * time.Minute
 )
 
 // To abstract a node over network.

@@ -55,7 +55,7 @@ var globalHandlers = []HandlerFunc{
 	// Forward path style requests to actual host in a bucket federated setup.
 	setBucketForwardingHandler,
 	// Ratelimit the incoming requests using a token bucket algorithm
-	setRateLimitHandler,
+	// setRateLimitHandler,
 	// Validate all the incoming requests.
 	setRequestValidityHandler,
 	// Network statistics
