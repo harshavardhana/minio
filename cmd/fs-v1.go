@@ -334,7 +334,7 @@ func (fs *FSObjects) ListBuckets(ctx context.Context) ([]BucketInfo, error) {
 		return nil, err
 	}
 	var bucketInfos []BucketInfo
-	entries, err := readDir((fs.fsPath))
+	entries, err := readDir((fs.fsPath), "")
 	if err != nil {
 		logger.LogIf(ctx, errDiskNotFound)
 		return nil, toObjectErr(errDiskNotFound)
@@ -1005,13 +1005,13 @@ func (fs *FSObjects) listDirFactory(isLeaf isLeafFunc) listDirFunc {
 	// listDir - lists all the entries at a given prefix and given entry in the prefix.
 	listDir := func(bucket, prefixDir, prefixEntry string) (entries []string, delayIsLeaf bool) {
 		var err error
-		entries, err = readDir(pathJoin(fs.fsPath, bucket, prefixDir))
+		entries, err = readDir(pathJoin(fs.fsPath, bucket, prefixDir), "")
 		if err != nil && err != errFileNotFound {
 			logger.LogIf(context.Background(), err)
 			return
 		}
-		entries, delayIsLeaf = filterListEntries(bucket, prefixDir, entries, prefixEntry, isLeaf)
-		return entries, delayIsLeaf
+		sort.Strings(entries)
+		return filterListEntries(bucket, prefixDir, entries, prefixEntry, isLeaf)
 	}
 
 	// Return list factory instance.
@@ -1022,7 +1022,7 @@ func (fs *FSObjects) listDirFactory(isLeaf isLeafFunc) listDirFunc {
 // and the prefix represents an empty directory. An S3 empty directory
 // is also an empty directory in the FS backend.
 func (fs *FSObjects) isObjectDir(bucket, prefix string) bool {
-	entries, err := readDirN(pathJoin(fs.fsPath, bucket, prefix), 1)
+	entries, err := readDirN(pathJoin(fs.fsPath, bucket, prefix), "", 1)
 	if err != nil {
 		return false
 	}
@@ -1180,17 +1180,13 @@ func (fs *FSObjects) ListObjects(ctx context.Context, bucket, prefix, marker, de
 			eof = true
 			break
 		}
-		// For any walk error return right away.
-		if walkResult.err != nil {
-			// File not found is a valid case.
-			if walkResult.err == errFileNotFound {
-				return loi, nil
-			}
-			return loi, toObjectErr(walkResult.err, bucket, prefix)
-		}
 		objInfo, err := entryToObjectInfo(walkResult.entry)
 		if err != nil {
-			return loi, nil
+			// File not found is a valid case.
+			if err == errFileNotFound {
+				continue
+			}
+			return loi, toObjectErr(err, bucket, prefix)
 		}
 		nextMarker = objInfo.Name
 		objInfos = append(objInfos, objInfo)

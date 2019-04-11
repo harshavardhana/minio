@@ -84,7 +84,7 @@ func (fs *FSObjects) backgroundAppend(ctx context.Context, bucket, object, uploa
 	nextPartNumber := len(file.parts) + 1
 	uploadIDDir := fs.getUploadIDDir(bucket, object, uploadID)
 
-	entries, err := readDir(uploadIDDir)
+	entries, err := readDir(uploadIDDir, "")
 	if err != nil {
 		logger.GetReqInfo(ctx).AppendTags("uploadIDDir", uploadIDDir)
 		logger.LogIf(ctx, err)
@@ -143,7 +143,7 @@ func (fs *FSObjects) ListMultipartUploads(ctx context.Context, bucket, object, k
 	result.NextKeyMarker = object
 	result.UploadIDMarker = uploadIDMarker
 
-	uploadIDs, err := readDir(fs.getMultipartSHADir(bucket, object))
+	uploadIDs, err := readDir(fs.getMultipartSHADir(bucket, object), "")
 	if err != nil {
 		if err == errFileNotFound {
 			result.IsTruncated = false
@@ -376,7 +376,7 @@ func (fs *FSObjects) ListObjectParts(ctx context.Context, bucket, object, upload
 		return result, toObjectErr(err, bucket, object)
 	}
 
-	entries, err := readDir(uploadIDDir)
+	entries, err := readDir(uploadIDDir, "")
 	if err != nil {
 		logger.LogIf(ctx, err)
 		return result, toObjectErr(err, bucket)
@@ -517,7 +517,7 @@ func (fs *FSObjects) CompleteMultipartUpload(ctx context.Context, bucket string,
 	// Allocate parts similar to incoming slice.
 	fsMeta.Parts = make([]ObjectPartInfo, len(parts))
 
-	entries, err := readDir(uploadIDDir)
+	entries, err := readDir(uploadIDDir, "")
 	if err != nil {
 		logger.GetReqInfo(ctx).AppendTags("uploadIDDir", uploadIDDir)
 		logger.LogIf(ctx, err)
@@ -760,12 +760,12 @@ func (fs *FSObjects) cleanupStaleMultipartUploads(ctx context.Context, cleanupIn
 			return
 		case <-ticker.C:
 			now := time.Now()
-			entries, err := readDir(pathJoin(fs.fsPath, minioMetaMultipartBucket))
+			entries, err := readDir(pathJoin(fs.fsPath, minioMetaMultipartBucket), "")
 			if err != nil {
 				continue
 			}
 			for _, entry := range entries {
-				uploadIDs, err := readDir(pathJoin(fs.fsPath, minioMetaMultipartBucket, entry))
+				uploadIDs, err := readDir(pathJoin(fs.fsPath, minioMetaMultipartBucket, entry), "")
 				if err != nil {
 					continue
 				}

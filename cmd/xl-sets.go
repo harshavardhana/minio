@@ -654,7 +654,7 @@ func listDirSetsFactory(ctx context.Context, isLeaf isLeafFunc, isLeafDir isLeaf
 			wg.Add(1)
 			go func(index int, disk StorageAPI) {
 				defer wg.Done()
-				diskEntries[index], _ = disk.ListDir(bucket, prefixDir, -1)
+				diskEntries[index], _ = disk.ListDir(bucket, prefixDir, -1, xlMetaJSONFile)
 			}(index, disk)
 		}
 
@@ -722,30 +722,16 @@ func (s *xlSets) ListObjects(ctx context.Context, bucket, prefix, marker, delimi
 	var eof bool
 	var nextMarker string
 
-	recursive := true
-	if delimiter == slashSeparator {
-		recursive = false
-	}
+	recursive := delimiter != slashSeparator
 
 	walkResultCh, endWalkCh := s.listPool.Release(listParams{bucket, recursive, marker, prefix})
 	if walkResultCh == nil {
 		endWalkCh = make(chan struct{})
 		isLeaf := func(bucket, entry string) bool {
-			entry = strings.TrimSuffix(entry, slashSeparator)
-			// Verify if we are at the leaf, a leaf is where we
-			// see `xl.json` inside a directory.
-			return s.getHashedSet(entry).isObject(bucket, entry)
+			return !hasSuffix(entry, slashSeparator)
 		}
 
 		isLeafDir := func(bucket, entry string) bool {
-			// Verify prefixes in all sets.
-			var ok bool
-			for _, set := range s.sets {
-				ok = set.isObjectDir(bucket, entry)
-				if ok {
-					return true
-				}
-			}
 			return false
 		}
 
@@ -761,18 +747,24 @@ func (s *xlSets) ListObjects(ctx context.Context, bucket, prefix, marker, delimi
 			break
 		}
 
-		// For any walk error return right away.
-		if walkResult.err != nil {
-			return result, toObjectErr(walkResult.err, bucket, prefix)
-		}
+		var (
+			objInfo ObjectInfo
+			err     error
+		)
 
-		var objInfo ObjectInfo
-		var err error
 		if hasSuffix(walkResult.entry, slashSeparator) {
-			// Verify prefixes in all sets.
 			for _, set := range s.sets {
 				objInfo, err = set.getObjectInfoDir(ctx, bucket, walkResult.entry)
 				if err == nil {
+					break
+				}
+				if err == errFileNotFound {
+					err = nil
+					objInfo = ObjectInfo{
+						Bucket: bucket,
+						Name:   walkResult.entry,
+						IsDir:  true,
+					}
 					break
 				}
 			}
@@ -808,7 +800,7 @@ func (s *xlSets) ListObjects(ctx context.Context, bucket, prefix, marker, delimi
 	result = ListObjectsInfo{IsTruncated: !eof}
 	for _, objInfo := range objInfos {
 		result.NextMarker = objInfo.Name
-		if objInfo.IsDir && delimiter == slashSeparator {
+		if objInfo.IsDir && !recursive {
 			result.Prefixes = append(result.Prefixes, objInfo.Name)
 			continue
 		}
@@ -1341,10 +1333,6 @@ func (s *xlSets) HealObjects(ctx context.Context, bucket, prefix string, healObj
 		walkResult, ok := <-walkResultCh
 		if !ok {
 			break
-		}
-		// For any walk error return right away.
-		if walkResult.err != nil {
-			return toObjectErr(walkResult.err, bucket, prefix)
 		}
 		if err := healObjectFn(bucket, strings.TrimSuffix(walkResult.entry, slashSeparator+xlMetaJSONFile)); err != nil {
 			return toObjectErr(err, bucket, walkResult.entry)

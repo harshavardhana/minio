@@ -382,7 +382,7 @@ func listDirCacheFactory(isLeaf isLeafFunc, disks []*cacheFSObjects) listDirFunc
 
 			fs := disk.FSObjects
 			var err error
-			entries, err = readDir(pathJoin(fs.fsPath, bucket, prefixDir))
+			entries, err = readDir(pathJoin(fs.fsPath, bucket, prefixDir), "")
 			if err != nil {
 				continue
 			}
@@ -453,10 +453,6 @@ func (c cacheObjects) listCacheObjects(ctx context.Context, bucket, prefix, mark
 			// Closed channel.
 			eof = true
 			break
-		}
-		// For any walk error return right away.
-		if walkResult.err != nil {
-			return result, toObjectErr(walkResult.err, bucket, prefix)
 		}
 
 		entry := walkResult.entry

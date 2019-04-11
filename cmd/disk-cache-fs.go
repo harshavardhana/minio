@@ -162,7 +162,7 @@ func (cfs *cacheFSObjects) purgeTrash() {
 			return
 		case <-ticker.C:
 			trashPath := path.Join(cfs.fsPath, minioMetaBucket, cacheTrashDir)
-			entries, err := readDir(trashPath)
+			entries, err := readDir(trashPath, "")
 			if err != nil {
 				return
 			}

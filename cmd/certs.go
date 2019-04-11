@@ -76,7 +76,7 @@ func getRootCAs(certsCAsDir string) (*x509.CertPool, error) {
 		rootCAs = x509.NewCertPool()
 	}
 
-	fis, err := readDir(certsCAsDir)
+	fis, err := readDir(certsCAsDir, "")
 	if err != nil {
 		if err == errFileNotFound {
 			err = nil // Return success if CA's directory is missing.

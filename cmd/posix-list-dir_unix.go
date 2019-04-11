@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -110,13 +111,13 @@ var readDirBufPool = sync.Pool{
 }
 
 // Return all the entries at the directory dirPath.
-func readDir(dirPath string) (entries []string, err error) {
-	return readDirN(dirPath, -1)
+func readDir(dirPath string, leafFile string) (entries []string, err error) {
+	return readDirN(dirPath, leafFile, -1)
 }
 
 // Return count entries at the directory dirPath and all entries
 // if count is set to -1
-func readDirN(dirPath string, count int) (entries []string, err error) {
+func readDirN(dirPath string, leafFile string, count int) (entries []string, err error) {
 	bufp := readDirBufPool.Get().(*[]byte)
 	buf := *bufp
 	defer readDirBufPool.Put(bufp)
@@ -160,7 +161,17 @@ func readDirN(dirPath string, count int) (entries []string, err error) {
 			}
 			remaining -= len(tmpEntries)
 		}
-		entries = append(entries, tmpEntries...)
+		if leafFile == "" {
+			entries = append(entries, tmpEntries...)
+			continue
+		} // leaf file is set.
+		for _, entry := range tmpEntries {
+			if _, err = os.Stat(pathJoin(dirPath, entry, leafFile)); err != nil {
+				entries = append(entries, entry)
+				continue
+			}
+			entries = append(entries, strings.TrimSuffix(entry, slashSeparator))
+		}
 	}
 	return
 }

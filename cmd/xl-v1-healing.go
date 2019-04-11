@@ -341,7 +341,7 @@ func (xl xlObjects) healObject(ctx context.Context, bucket string, object string
 		}
 
 		// List and delete the object directory,
-		files, derr := disk.ListDir(bucket, object, -1)
+		files, derr := disk.ListDir(bucket, object, -1, "")
 		if derr == nil {
 			for _, entry := range files {
 				_ = disk.DeleteFile(bucket,
@@ -506,7 +506,7 @@ func (xl xlObjects) healObjectDir(ctx context.Context, bucket, object string, dr
 				hr.Before.Drives[idx].State = madmin.DriveStateMissing
 				hr.After.Drives[idx].State = madmin.DriveStateMissing
 			default:
-				logger.LogIf(ctx, err)
+				logger.LogIf(ctx, statErr)
 				return
 			}
 

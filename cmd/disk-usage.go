@@ -38,7 +38,7 @@ func walk(ctx context.Context, path string, usageFn usageFunc) error {
 		return nil
 	}
 
-	entries, err := readDir(path)
+	entries, err := readDir(path, "")
 	if err != nil {
 		return usageFn(ctx, path)
 	}

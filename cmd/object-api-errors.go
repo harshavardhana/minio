@@ -63,10 +63,15 @@ func toObjectErr(err error, params ...string) error {
 			}
 		}
 	case errFileNotFound:
-		if len(params) >= 2 {
+		switch len(params) {
+		case 2:
 			err = ObjectNotFound{
 				Bucket: params[0],
 				Object: params[1],
+			}
+		case 3:
+			err = InvalidUploadID{
+				UploadID: params[2],
 			}
 		}
 	case errFileNameTooLong:
@@ -321,6 +326,8 @@ func (e MalformedUploadID) Error() string {
 
 // InvalidUploadID invalid upload id.
 type InvalidUploadID struct {
+	Bucket   string
+	Object   string
 	UploadID string
 }
 

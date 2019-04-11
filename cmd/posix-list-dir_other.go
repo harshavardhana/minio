@@ -29,12 +29,12 @@ import (
 )
 
 // Return all the entries at the directory dirPath.
-func readDir(dirPath string) (entries []string, err error) {
-	return readDirN(dirPath, -1)
+func readDir(dirPath string, leafFile string) (entries []string, err error) {
+	return readDirN(dirPath, leafFile, -1)
 }
 
 // Return N entries at the directory dirPath. If count is -1, return all entries
-func readDirN(dirPath string, count int) (entries []string, err error) {
+func readDirN(dirPath string, leafFile string, count int) (entries []string, err error) {
 	d, err := os.Open(dirPath)
 	if err != nil {
 		// File is really not found.
@@ -77,7 +77,7 @@ func readDirN(dirPath string, count int) (entries []string, err error) {
 			// Stat symbolic link and follow to get the final value.
 			if fi.Mode()&os.ModeSymlink == os.ModeSymlink {
 				var st os.FileInfo
-				st, err = os.Stat(path.Join(dirPath, fi.Name()))
+				st, err = os.Stat(pathJoin(dirPath, fi.Name()))
 				if err != nil {
 					reqInfo := (&logger.ReqInfo{}).AppendTags("path", path.Join(dirPath, fi.Name()))
 					ctx := logger.SetReqInfo(context.Background(), reqInfo)
@@ -86,7 +86,15 @@ func readDirN(dirPath string, count int) (entries []string, err error) {
 				}
 				// Append to entries if symbolic link exists and is valid.
 				if st.IsDir() {
-					entries = append(entries, fi.Name()+slashSeparator)
+					if leafFile != "" {
+						if _, err = os.Stat(pathJoin(dirPath, fi.Name(), leafFile)); err != nil {
+							entries = append(entries, fi.Name()+slashSeparator)
+						} else {
+							entries = append(entries, fi.Name())
+						}
+					} else {
+						entries = append(entries, fi.Name()+slashSeparator)
+					}
 				} else if st.Mode().IsRegular() {
 					entries = append(entries, fi.Name())
 				}
@@ -96,8 +104,16 @@ func readDirN(dirPath string, count int) (entries []string, err error) {
 				continue
 			}
 			if fi.Mode().IsDir() {
-				// Append "/" instead of "\" so that sorting is achieved as expected.
-				entries = append(entries, fi.Name()+slashSeparator)
+				if leafFile != "" {
+					// Append "/" instead of "\" so that sorting is achieved as expected.
+					if _, err = os.Stat(pathJoin(dirPath, fi.Name(), leafFile)); err != nil {
+						entries = append(entries, fi.Name()+slashSeparator)
+					} else {
+						entries = append(entries, fi.Name())
+					}
+				} else {
+					entries = append(entries, fi.Name()+slashSeparator)
+				}
 			} else if fi.Mode().IsRegular() {
 				entries = append(entries, fi.Name())
 			}

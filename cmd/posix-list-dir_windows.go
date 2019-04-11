@@ -26,12 +26,12 @@ import (
 )
 
 // Return all the entries at the directory dirPath.
-func readDir(dirPath string) (entries []string, err error) {
-	return readDirN(dirPath, -1)
+func readDir(dirPath string, leafFile string) (entries []string, err error) {
+	return readDirN(dirPath, leafFile, -1)
 }
 
 // Return N entries at the directory dirPath. If count is -1, return all entries
-func readDirN(dirPath string, count int) (entries []string, err error) {
+func readDirN(dirPath string, leafFile string, count int) (entries []string, err error) {
 	d, err := os.Open(dirPath)
 	if err != nil {
 		// File is really not found.
@@ -93,12 +93,28 @@ func readDirN(dirPath string, count int) (entries []string, err error) {
 				return nil, err
 			}
 			if fi.IsDir() {
-				entries = append(entries, name+slashSeparator)
+				if leafFile != "" {
+					if _, err = os.Stat(pathJoin(dirPath, name, leafFile)); err != nil {
+						entries = append(entries, name+slashSeparator)
+					} else {
+						entries = append(entries, name)
+					}
+				} else {
+					entries = append(entries, name+slashSeparator)
+				}
 			} else if fi.Mode().IsRegular() {
 				entries = append(entries, name)
 			}
 		case data.FileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY != 0:
-			entries = append(entries, name+slashSeparator)
+			if leafFile != "" {
+				if _, err = os.Stat(pathJoin(dirPath, name, leafFile)); err != nil {
+					entries = append(entries, name+slashSeparator)
+				} else {
+					entries = append(entries, name)
+				}
+			} else {
+				entries = append(entries, name+slashSeparator)
+			}
 		default:
 			entries = append(entries, name)
 		}
