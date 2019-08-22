@@ -92,7 +92,7 @@ require (
 	github.com/valyala/tcplisten v0.0.0-20161114210144-ceec8f93295a
 	go.etcd.io/bbolt v1.3.3 // indirect
 	go.uber.org/atomic v1.3.2
-	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
+	golang.org/x/crypto v0.0.0-20190513172903-22d7a77e9e5f
 	golang.org/x/net v0.0.0-20190813141303-74dc4d7220e7 // indirect
 	golang.org/x/sys v0.0.0-20190813064441-fde4db37ae7a
 	google.golang.org/api v0.4.0
@@ -103,3 +103,11 @@ require (
 
 // Added for go1.13 migration https://github.com/golang/go/issues/32805
 replace github.com/gorilla/rpc v1.2.0+incompatible => github.com/gorilla/rpc v1.2.0
+
+replace github.com/eapache/go-xerial-snappy => github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21
+
+replace github.com/eapache/queue => github.com/eapache/queue v1.1.0
+
+replace github.com/mattn/go-runewidth => github.com/mattn/go-runewidth v0.0.4
+
+replace github.com/mitchellh/mapstructure => github.com/mitchellh/mapstructure v1.1.2
