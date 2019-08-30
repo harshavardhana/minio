@@ -1,5 +1,5 @@
 /*
- * MinIO Cloud Storage, (C) 2017 MinIO, Inc.
+ * MinIO Cloud Storage, (C) 2017-2019 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,10 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
@@ -380,7 +382,7 @@ func NewEndpointList(args ...string) (endpoints EndpointList, err error) {
 	for i, arg := range args {
 		endpoint, err := NewEndpoint(arg)
 		if err != nil {
-			return nil, fmt.Errorf("'%s': %s", arg, err.Error())
+			return nil, fmt.Errorf("'%s': %s", arg, err)
 		}
 
 		// All endpoints have to be same type and scheme if applicable.
@@ -404,13 +406,78 @@ func NewEndpointList(args ...string) (endpoints EndpointList, err error) {
 	return endpoints, nil
 }
 
+type fileInfo struct {
+	os.FileInfo
+	Path string
+}
+
+func checkEndpointDisksSame(ctx *cli.Context, endpoints EndpointList) error {
+	if len(endpoints) == 1 {
+		// FS mode there are no multiple disks on command line.
+		return nil
+	}
+	var (
+		localDisksInfo = make([]fileInfo, len(endpoints))
+		errs           = make([]error, len(endpoints))
+		wg             sync.WaitGroup
+	)
+	for i, endpoint := range endpoints {
+		if !endpoint.IsLocal {
+			continue
+		}
+		wg.Add(1)
+		go func(index int, path string) {
+			defer wg.Done()
+			localDiskInfo, err := os.Stat(path)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					errs[index] = err
+					return
+				}
+			}
+			localDisksInfo[index] = fileInfo{
+				FileInfo: localDiskInfo,
+				Path:     path,
+			}
+		}(i, endpoint.Path)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+
+	// Sort all entries together.
+	sort.Slice(localDisksInfo, func(i, j int) bool {
+		return !os.SameFile(localDisksInfo[i].FileInfo, localDisksInfo[j].FileInfo)
+	})
+
+	// Now do a binary search to find duplicates.
+	var pi, si int
+	for si = range localDisksInfo {
+		ci := sort.Search(len(localDisksInfo), func(i int) bool {
+			return !os.SameFile(localDisksInfo[i].FileInfo, localDisksInfo[si].FileInfo)
+		})
+		if pi == ci {
+			// We found duplicates
+			break
+		}
+		pi = ci
+	}
+	if pi != 0 {
+		return fmt.Errorf("Same disk is mounted at multiple %s, %s locations. Please make sure to provide unique paths which point to unique disks: %s", localDisksInfo[si].Path, localDisksInfo[pi-1].Path, ctx.Args())
+	}
+	return nil
+}
+
 func checkEndpointsSubOptimal(ctx *cli.Context, setupType SetupType, endpoints EndpointList) (err error) {
 	// Validate sub optimal ordering only for distributed setup.
 	if setupType != DistXLSetupType {
 		return nil
 	}
 	var endpointOrder int
-	err = fmt.Errorf("Too many disk args are local, input is in sub-optimal order. Please review input args: %s", ctx.Args())
+	err = fmt.Errorf("Too many disks are local, input is in sub-optimal order for distributed setup. Please review input args: %s", ctx.Args())
 	for _, endpoint := range endpoints {
 		if endpoint.IsLocal {
 			endpointOrder++

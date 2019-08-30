@@ -169,6 +169,9 @@ func serverHandleCmdArgs(ctx *cli.Context) {
 	}
 	logger.FatalIf(err, "Invalid command line arguments")
 
+	// Verify if we have same disks mounted at different input args.
+	logger.FatalIf(checkEndpointDisksSame(ctx, globalEndpoints), "Invalid command line arguments")
+
 	logger.LogIf(context.Background(), checkEndpointsSubOptimal(ctx, setupType, globalEndpoints))
 
 	globalMinioHost, globalMinioPort = mustSplitHostPort(globalMinioAddr)
