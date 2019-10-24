@@ -58,6 +58,7 @@ const (
 	WormSubSys            = "worm"
 	CacheSubSys           = "cache"
 	RegionSubSys          = "region"
+	EtcdSubSys            = "etcd"
 	StorageClassSubSys    = "storageclass"
 	CompressionSubSys     = "compression"
 	KmsVaultSubSys        = "kms_vault"
@@ -88,6 +89,7 @@ var SubSystems = set.CreateStringSet([]string{
 	CredentialsSubSys,
 	WormSubSys,
 	RegionSubSys,
+	EtcdSubSys,
 	CacheSubSys,
 	StorageClassSubSys,
 	CompressionSubSys,
@@ -114,6 +116,7 @@ var SubSystemsSingleTargets = set.CreateStringSet([]string{
 	CredentialsSubSys,
 	WormSubSys,
 	RegionSubSys,
+	EtcdSubSys,
 	CacheSubSys,
 	StorageClassSubSys,
 	CompressionSubSys,
@@ -134,7 +137,8 @@ const (
 	KvSingleQuote      = `'`
 
 	// Env prefix used for all envs in MinIO
-	EnvPrefix = "MINIO_"
+	EnvPrefix        = "MINIO_"
+	EnvWordDelimiter = `_`
 )
 
 // KVS - is a shorthand for some wrapper functions
