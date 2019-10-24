@@ -223,7 +223,7 @@ var helpMap = map[string]config.HelpKV{
 }
 
 // GetHelp - returns help for sub-sys, a key for a sub-system or all the help.
-func GetHelp(subSys, key string) (io.Reader, error) {
+func GetHelp(subSys, key string, envOnly bool) (io.Reader, error) {
 	if len(subSys) == 0 {
 		return nil, config.Error("no help available for empty sub-system inputs")
 	}
@@ -236,7 +236,19 @@ func GetHelp(subSys, key string) (io.Reader, error) {
 		if !ok {
 			return nil, config.Error(fmt.Sprintf("unknown key %s for sub-system %s", key, subSys))
 		}
-		return strings.NewReader(value), nil
+		help = config.HelpKV{
+			key: value,
+		}
+	}
+
+	envHelp := config.HelpKV{}
+	if envOnly {
+		for k, v := range help {
+			envHelp[config.EnvPrefix+strings.Join([]string{
+				strings.ToTitle(subSys), strings.ToTitle(k),
+			}, "_")] = v
+		}
+		help = envHelp
 	}
 
 	var s strings.Builder

@@ -24,10 +24,13 @@ import (
 )
 
 // HelpConfigKV - return help for a given sub-system.
-func (adm *AdminClient) HelpConfigKV(subSys, key string, noColor bool) (io.ReadCloser, error) {
+func (adm *AdminClient) HelpConfigKV(subSys, key string, envOnly, noColor bool) (io.ReadCloser, error) {
 	v := url.Values{}
 	v.Set("subSys", subSys)
 	v.Set("key", key)
+	if envOnly {
+		v.Set("env", "")
+	}
 	if noColor {
 		v.Set("noColor", "")
 	}

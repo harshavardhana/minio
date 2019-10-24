@@ -132,6 +132,9 @@ const (
 	KvNewline          = "\n"
 	KvDoubleQuote      = `"`
 	KvSingleQuote      = `'`
+
+	// Env prefix used for all envs in MinIO
+	EnvPrefix = "MINIO_"
 )
 
 // KVS - is a shorthand for some wrapper functions

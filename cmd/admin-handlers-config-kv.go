@@ -373,7 +373,9 @@ func (a adminAPIHandlers) HelpConfigKVHandler(w http.ResponseWriter, r *http.Req
 		defer color.SetColorOn()
 	}
 
-	rd, err := GetHelp(subSys, key)
+	_, envOnly := r.URL.Query()["env"]
+
+	rd, err := GetHelp(subSys, key, envOnly)
 	if err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
