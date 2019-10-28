@@ -25,6 +25,10 @@ import (
 	_ "github.com/minio/minio/cmd/gateway/oss"
 	_ "github.com/minio/minio/cmd/gateway/s3"
 
+	// Replica is specifically kept here to avoid re-ordering by goimports,
+	// please ask on github.com/minio/minio/issues before changing this.
+	_ "github.com/minio/minio/cmd/gateway/replica"
+
 	// B2 is specifically kept here to avoid re-ordering by goimports,
 	// please ask on github.com/minio/minio/issues before changing this.
 	_ "github.com/minio/minio/cmd/gateway/b2"
