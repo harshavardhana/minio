@@ -57,6 +57,7 @@ func (xl xlObjects) isObject(bucket, prefix string) (ok bool) {
 	var wg sync.WaitGroup
 	for index, disk := range xl.getDisks() {
 		if disk == nil {
+			errs[index] = errDiskNotFound
 			continue
 		}
 		wg.Add(1)
