@@ -20,6 +20,7 @@ import "github.com/minio/minio/cmd/config"
 
 // Help template for KMS vault
 var (
+	// HelpVault ...
 	HelpVault = config.HelpKVS{
 		config.HelpKV{
 			Key:         KMSVaultEndpoint,
@@ -72,6 +73,7 @@ var (
 		},
 	}
 
+	// HelpKes ...
 	HelpKes = config.HelpKVS{
 		config.HelpKV{
 			Key:         KMSKesEndpoint,

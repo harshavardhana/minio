@@ -34,27 +34,40 @@ type KMSConfig struct {
 
 // KMS Vault constants.
 const (
-	KMSVaultEndpoint      = "endpoint"
-	KMSVaultCAPath        = "capath"
-	KMSVaultKeyName       = "key_name"
-	KMSVaultKeyVersion    = "key_version"
-	KMSVaultNamespace     = "namespace"
-	KMSVaultAuthType      = "auth_type"
-	KMSVaultAppRoleID     = "auth_approle_id"
+	// KMSVaultEndpoint vault endpoint e.g https://127.0.0.1:8200
+	KMSVaultEndpoint = "endpoint"
+	// KMSVaultCAPath vault cert CA path key
+	KMSVaultCAPath = "capath"
+	// KMSVaultKeyName vault master key name
+	KMSVaultKeyName = "key_name"
+	// KMSVaultKeyVersion vault master key version
+	KMSVaultKeyVersion = "key_version"
+	// KMSVaultNamespace vault key namespace
+	KMSVaultNamespace = "namespace"
+	// KMSVaultAuthType vault auth type
+	KMSVaultAuthType = "auth_type"
+	// KMSVaultAppRoleID vault auth approle id
+	KMSVaultAppRoleID = "auth_approle_id"
+	// KMSVaultAppRoleSecret vault auth approle secret
 	KMSVaultAppRoleSecret = "auth_approle_secret"
 )
 
 // KMS kes constants.
 const (
+	// KMSKesEndpoint kes endpoint e.g https://127.0.0.1:7373
 	KMSKesEndpoint = "endpoint"
-	KMSKesKeyFile  = "key_file"
+	// KMSKesKeyFile kes self signed identity key
+	KMSKesKeyFile = "key_file"
+	// KMSKesCertFile kes self signed identity cert
 	KMSKesCertFile = "cert_file"
-	KMSKesCAPath   = "capath"
-	KMSKesKeyName  = "key_name"
+	// KMSKesCAPath kes self signed CA path
+	KMSKesCAPath = "capath"
+	// KMSKesKeyName kes custom key name
+	KMSKesKeyName = "key_name"
 )
 
-// DefaultKVS - default KV crypto config
 var (
+	// DefaultVaultKVS default Vault KMS config
 	DefaultVaultKVS = config.KVS{
 		config.KV{
 			Key:   KMSVaultEndpoint,
@@ -90,6 +103,7 @@ var (
 		},
 	}
 
+	// DefaultKesKVS default KES KMS config
 	DefaultKesKVS = config.KVS{
 		config.KV{
 			Key:   KMSKesEndpoint,

@@ -249,7 +249,7 @@ func (c *kesClient) GenerateDataKey(name string, context []byte) ([]byte, []byte
 	return response.Plaintext, response.Ciphertext, nil
 }
 
-// GenerateDataKey decrypts an encrypted data key with the key
+// DecryptDataKey decrypts an encrypted data key with the key
 // specified by name by talking to the KES server.
 // On success, the KES server will respond with the plaintext key.
 //
