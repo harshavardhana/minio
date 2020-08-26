@@ -697,7 +697,7 @@ func (z *erasureZones) listObjectsNonSlash(ctx context.Context, bucket, prefix, 
 
 	for _, zone := range z.zones {
 		zonesEntryChs = append(zonesEntryChs,
-			zone.startMergeWalksN(ctx, bucket, prefix, "", true, endWalkCh, zone.drivesPerSet))
+			zone.startMergeWalksN(ctx, bucket, prefix, "", true, endWalkCh, zone.drivesPerSet/2+1))
 		zonesDrivesPerSet = append(zonesDrivesPerSet, zone.drivesPerSet)
 	}
 
@@ -816,7 +816,7 @@ func (z *erasureZones) listObjectsSplunk(ctx context.Context, bucket, prefix, ma
 		entryChs, endWalkCh := zone.poolSplunk.Release(listParams{bucket, recursive, marker, prefix})
 		if entryChs == nil {
 			endWalkCh = make(chan struct{})
-			entryChs = zone.startSplunkMergeWalksN(ctx, bucket, prefix, marker, endWalkCh, zone.drivesPerSet)
+			entryChs = zone.startSplunkMergeWalksN(ctx, bucket, prefix, marker, endWalkCh, zone.drivesPerSet/2+1)
 		}
 		zonesEntryChs = append(zonesEntryChs, entryChs)
 		zonesEndWalkCh = append(zonesEndWalkCh, endWalkCh)
@@ -908,7 +908,7 @@ func (z *erasureZones) listObjects(ctx context.Context, bucket, prefix, marker, 
 		entryChs, endWalkCh := zone.pool.Release(listParams{bucket, recursive, marker, prefix})
 		if entryChs == nil {
 			endWalkCh = make(chan struct{})
-			entryChs = zone.startMergeWalksN(ctx, bucket, prefix, marker, recursive, endWalkCh, zone.drivesPerSet)
+			entryChs = zone.startMergeWalksN(ctx, bucket, prefix, marker, recursive, endWalkCh, zone.drivesPerSet/2+1)
 		}
 		zonesEntryChs = append(zonesEntryChs, entryChs)
 		zonesEndWalkCh = append(zonesEndWalkCh, endWalkCh)
@@ -951,18 +951,9 @@ func (z *erasureZones) listObjects(ctx context.Context, bucket, prefix, marker, 
 // N times until this boolean is 'false'.
 func lexicallySortedEntryZone(zoneEntryChs [][]FileInfoCh, zoneEntries [][]FileInfo, zoneEntriesValid [][]bool) (FileInfo, int, int, bool) {
 	for i, entryChs := range zoneEntryChs {
-		i := i
-		var wg sync.WaitGroup
 		for j := range entryChs {
-			j := j
-			wg.Add(1)
-			// Pop() entries in parallel for large drive setups.
-			go func() {
-				defer wg.Done()
-				zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
-			}()
+			zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
 		}
-		wg.Wait()
 	}
 
 	var isTruncated = false
@@ -1040,18 +1031,9 @@ func lexicallySortedEntryZone(zoneEntryChs [][]FileInfoCh, zoneEntries [][]FileI
 // N times until this boolean is 'false'.
 func lexicallySortedEntryZoneVersions(zoneEntryChs [][]FileInfoVersionsCh, zoneEntries [][]FileInfoVersions, zoneEntriesValid [][]bool) (FileInfoVersions, int, int, bool) {
 	for i, entryChs := range zoneEntryChs {
-		i := i
-		var wg sync.WaitGroup
 		for j := range entryChs {
-			j := j
-			wg.Add(1)
-			// Pop() entries in parallel for large drive setups.
-			go func() {
-				defer wg.Done()
-				zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
-			}()
+			zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
 		}
-		wg.Wait()
 	}
 
 	var isTruncated = false
@@ -1182,18 +1164,9 @@ func mergeZonesEntriesCh(zonesEntryChs [][]FileInfoCh, maxKeys int, drivesPerSet
 
 func isTruncatedZones(zoneEntryChs [][]FileInfoCh, zoneEntries [][]FileInfo, zoneEntriesValid [][]bool) bool {
 	for i, entryChs := range zoneEntryChs {
-		i := i
-		var wg sync.WaitGroup
 		for j := range entryChs {
-			j := j
-			wg.Add(1)
-			// Pop() entries in parallel for large drive setups.
-			go func() {
-				defer wg.Done()
-				zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
-			}()
+			zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
 		}
-		wg.Wait()
 	}
 
 	var isTruncated = false
@@ -1214,24 +1187,16 @@ func isTruncatedZones(zoneEntryChs [][]FileInfoCh, zoneEntries [][]FileInfo, zon
 				zoneEntryChs[i][j].Push(zoneEntries[i][j])
 			}
 		}
+
 	}
 	return isTruncated
 }
 
 func isTruncatedZonesVersions(zoneEntryChs [][]FileInfoVersionsCh, zoneEntries [][]FileInfoVersions, zoneEntriesValid [][]bool) bool {
 	for i, entryChs := range zoneEntryChs {
-		i := i
-		var wg sync.WaitGroup
 		for j := range entryChs {
-			j := j
-			wg.Add(1)
-			// Pop() entries in parallel for large drive setups.
-			go func() {
-				defer wg.Done()
-				zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
-			}()
+			zoneEntries[i][j], zoneEntriesValid[i][j] = entryChs[j].Pop()
 		}
-		wg.Wait()
 	}
 
 	var isTruncated = false
@@ -1312,7 +1277,7 @@ func (z *erasureZones) listObjectVersions(ctx context.Context, bucket, prefix, m
 		entryChs, endWalkCh := zone.poolVersions.Release(listParams{bucket, recursive, marker, prefix})
 		if entryChs == nil {
 			endWalkCh = make(chan struct{})
-			entryChs = zone.startMergeWalksVersionsN(ctx, bucket, prefix, marker, recursive, endWalkCh, zone.drivesPerSet)
+			entryChs = zone.startMergeWalksVersionsN(ctx, bucket, prefix, marker, recursive, endWalkCh, zone.drivesPerSet/2+1)
 		}
 		zonesEntryChs = append(zonesEntryChs, entryChs)
 		zonesEndWalkCh = append(zonesEndWalkCh, endWalkCh)
