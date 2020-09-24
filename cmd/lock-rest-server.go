@@ -64,6 +64,7 @@ func (l *lockRESTServer) IsValid(w http.ResponseWriter, r *http.Request) bool {
 
 func getLockArgs(r *http.Request) (args dsync.LockArgs, err error) {
 	args = dsync.LockArgs{
+		Owner:  r.URL.Query().Get(lockRESTOwner),
 		UID:    r.URL.Query().Get(lockRESTUID),
 		Source: r.URL.Query().Get(lockRESTSource),
 	}
@@ -109,6 +110,17 @@ func (l *lockRESTServer) LockHandler(w http.ResponseWriter, r *http.Request) {
 		l.writeErrorResponse(w, err)
 		return
 	}
+
+	if success {
+		// Check if client is still alive if it has died
+		// then we simply unlock and proceed.
+		select {
+		case <-r.Context().Done():
+			_, _ = l.ll.Unlock(args)
+			l.writeErrorResponse(w, errLockConflict)
+		default:
+		}
+	}
 }
 
 // UnlockHandler - releases the acquired lock.
@@ -153,6 +165,16 @@ func (l *lockRESTServer) RLockHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		l.writeErrorResponse(w, err)
 		return
+	}
+	if success {
+		// Check if client is still alive if it has died
+		// then we simply unlock and proceed.
+		select {
+		case <-r.Context().Done():
+			_, _ = l.ll.RUnlock(args)
+			l.writeErrorResponse(w, errLockConflict)
+		default:
+		}
 	}
 }
 
@@ -246,10 +268,28 @@ func lockMaintenance(ctx context.Context, interval time.Duration) error {
 		return nil
 	}
 
+	type nlock struct {
+		locks  int
+		writer bool
+	}
+
+	updateNlocks := func(nlripsMap map[string]nlock, name string, writer bool) {
+		nlk, ok := nlripsMap[name]
+		if !ok {
+			nlripsMap[name] = nlock{
+				locks:  1,
+				writer: writer,
+			}
+		} else {
+			nlk.locks++
+			nlripsMap[name] = nlk
+		}
+	}
+
 	// Validate if long lived locks are indeed clean.
 	// Get list of long lived locks to check for staleness.
 	for lendpoint, nlrips := range getLongLivedLocks(interval) {
-		nlripsMap := make(map[string]int, len(nlrips))
+		nlripsMap := make(map[string]nlock, len(nlrips))
 		for _, nlrip := range nlrips {
 			// Locks are only held on first zone, make sure that
 			// we only look for ownership of locks from endpoints
@@ -257,7 +297,7 @@ func lockMaintenance(ctx context.Context, interval time.Duration) error {
 			for _, endpoint := range globalEndpoints[0].Endpoints {
 				c := newLockAPI(endpoint)
 				if !c.IsOnline() {
-					nlripsMap[nlrip.name]++
+					updateNlocks(nlripsMap, nlrip.name, nlrip.lri.Writer)
 					continue
 				}
 
@@ -266,33 +306,32 @@ func lockMaintenance(ctx context.Context, interval time.Duration) error {
 				// Call back to original server verify whether the lock is
 				// still active (based on name & uid)
 				expired, err := c.Expired(ctx, dsync.LockArgs{
+					Owner:     nlrip.lri.Owner,
 					UID:       nlrip.lri.UID,
 					Resources: []string{nlrip.name},
 				})
 				cancel()
 				if err != nil {
-					nlripsMap[nlrip.name]++
+					updateNlocks(nlripsMap, nlrip.name, nlrip.lri.Writer)
 					c.Close()
 					continue
 				}
 
 				if !expired {
-					nlripsMap[nlrip.name]++
+					updateNlocks(nlripsMap, nlrip.name, nlrip.lri.Writer)
 				}
 
 				// Close the connection regardless of the call response.
 				c.Close()
 			}
 
-			// Read locks we assume quorum for be N/2 success
-			quorum := objAPI.SetDriveCount() / 2
+			quorum := getReadQuorum(objAPI.SetDriveCount())
 			if nlrip.lri.Writer {
-				// For write locks we need N/2+1 success
-				quorum = objAPI.SetDriveCount()/2 + 1
+				quorum = getWriteQuorum(objAPI.SetDriveCount())
 			}
 
 			// less than the quorum, we have locks expired.
-			if nlripsMap[nlrip.name] < quorum {
+			if nlripsMap[nlrip.name].locks < quorum {
 				// The lock is no longer active at server that originated
 				// the lock, attempt to remove the lock.
 				globalLockServers[lendpoint].mutex.Lock()
@@ -348,7 +387,6 @@ func startLockMaintenance(ctx context.Context) {
 
 // registerLockRESTHandlers - register lock rest router.
 func registerLockRESTHandlers(router *mux.Router, endpointZones EndpointZones) {
-	queries := restQueries(lockRESTUID, lockRESTSource)
 	for _, ep := range endpointZones {
 		for _, endpoint := range ep.Endpoints {
 			if !endpoint.IsLocal {
@@ -361,11 +399,11 @@ func registerLockRESTHandlers(router *mux.Router, endpointZones EndpointZones) {
 
 			subrouter := router.PathPrefix(path.Join(lockRESTPrefix, endpoint.Path)).Subrouter()
 			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodHealth).HandlerFunc(httpTraceHdrs(lockServer.HealthHandler))
-			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodLock).HandlerFunc(httpTraceHdrs(lockServer.LockHandler)).Queries(queries...)
-			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodRLock).HandlerFunc(httpTraceHdrs(lockServer.RLockHandler)).Queries(queries...)
-			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodUnlock).HandlerFunc(httpTraceHdrs(lockServer.UnlockHandler)).Queries(queries...)
-			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodRUnlock).HandlerFunc(httpTraceHdrs(lockServer.RUnlockHandler)).Queries(queries...)
-			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodExpired).HandlerFunc(httpTraceAll(lockServer.ExpiredHandler)).Queries(queries...)
+			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodLock).HandlerFunc(httpTraceHdrs(lockServer.LockHandler))
+			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodRLock).HandlerFunc(httpTraceHdrs(lockServer.RLockHandler))
+			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodUnlock).HandlerFunc(httpTraceHdrs(lockServer.UnlockHandler))
+			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodRUnlock).HandlerFunc(httpTraceHdrs(lockServer.RUnlockHandler))
+			subrouter.Methods(http.MethodPost).Path(lockRESTVersionPrefix + lockRESTMethodExpired).HandlerFunc(httpTraceAll(lockServer.ExpiredHandler))
 
 			globalLockServers[endpoint] = lockServer.ll
 		}

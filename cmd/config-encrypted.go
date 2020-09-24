@@ -31,9 +31,8 @@ import (
 	etcd "go.etcd.io/etcd/v3/clientv3"
 )
 
-func handleEncryptedConfigBackend(objAPI ObjectLayer) error {
-
-	encrypted, err := checkBackendEncrypted(objAPI)
+func handleEncryptedConfigBackend(ctx context.Context, objAPI ObjectLayer) error {
+	encrypted, err := checkBackendEncrypted(ctx, objAPI)
 	if err != nil {
 		return fmt.Errorf("Unable to encrypt config %w", err)
 	}
@@ -57,7 +56,7 @@ func handleEncryptedConfigBackend(objAPI ObjectLayer) error {
 	}
 
 	// Migrate IAM configuration
-	if err = migrateConfigPrefixToEncrypted(objAPI, globalOldCred, encrypted); err != nil {
+	if err = migrateConfigPrefixToEncrypted(ctx, objAPI, globalOldCred, encrypted); err != nil {
 		return fmt.Errorf("Unable to migrate all config at .minio.sys/config/: %w", err)
 	}
 
@@ -81,8 +80,8 @@ func checkBackendEtcdEncrypted(ctx context.Context, client *etcd.Client) (bool, 
 	return err == nil && bytes.Equal(data, backendEncryptedMigrationComplete), nil
 }
 
-func checkBackendEncrypted(objAPI ObjectLayer) (bool, error) {
-	data, err := readConfig(GlobalContext, objAPI, backendEncryptedFile)
+func checkBackendEncrypted(ctx context.Context, objAPI ObjectLayer) (bool, error) {
+	data, err := readConfig(ctx, objAPI, backendEncryptedFile)
 	if err != nil && err != errConfigNotFound {
 		return false, err
 	}
@@ -148,9 +147,8 @@ func migrateIAMConfigsEtcdToEncrypted(ctx context.Context, client *etcd.Client) 
 	}
 
 	listCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
-	defer cancel()
-
 	r, err := client.Get(listCtx, minioConfigPrefix, etcd.WithPrefix(), etcd.WithKeysOnly())
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -214,7 +212,7 @@ func migrateIAMConfigsEtcdToEncrypted(ctx context.Context, client *etcd.Client) 
 	return saveKeyEtcd(ctx, client, backendEncryptedFile, backendEncryptedMigrationComplete)
 }
 
-func migrateConfigPrefixToEncrypted(objAPI ObjectLayer, activeCredOld auth.Credentials, encrypted bool) error {
+func migrateConfigPrefixToEncrypted(ctx context.Context, objAPI ObjectLayer, activeCredOld auth.Credentials, encrypted bool) error {
 	if encrypted {
 		// No key rotation requested, and backend is
 		// already encrypted. We proceed without migration.
@@ -231,14 +229,14 @@ func migrateConfigPrefixToEncrypted(objAPI ObjectLayer, activeCredOld auth.Crede
 		logger.Info("Attempting encryption of all config, IAM users and policies on MinIO backend")
 	}
 
-	err := saveConfig(GlobalContext, objAPI, backendEncryptedFile, backendEncryptedMigrationIncomplete)
+	err := saveConfig(ctx, objAPI, backendEncryptedFile, backendEncryptedMigrationIncomplete)
 	if err != nil {
 		return err
 	}
 
 	var marker string
 	for {
-		res, err := objAPI.ListObjects(GlobalContext, minioMetaBucket,
+		res, err := objAPI.ListObjects(ctx, minioMetaBucket,
 			minioConfigPrefix, marker, "", maxObjectList)
 		if err != nil {
 			return err
@@ -249,7 +247,7 @@ func migrateConfigPrefixToEncrypted(objAPI ObjectLayer, activeCredOld auth.Crede
 				cencdata []byte
 			)
 
-			cdata, err = readConfig(GlobalContext, objAPI, obj.Name)
+			cdata, err = readConfig(ctx, objAPI, obj.Name)
 			if err != nil {
 				return err
 			}
@@ -282,7 +280,7 @@ func migrateConfigPrefixToEncrypted(objAPI ObjectLayer, activeCredOld auth.Crede
 				return err
 			}
 
-			if err = saveConfig(GlobalContext, objAPI, obj.Name, cencdata); err != nil {
+			if err = saveConfig(ctx, objAPI, obj.Name, cencdata); err != nil {
 				return err
 			}
 		}
@@ -298,5 +296,5 @@ func migrateConfigPrefixToEncrypted(objAPI ObjectLayer, activeCredOld auth.Crede
 		logger.Info("Rotation complete, please make sure to unset MINIO_ACCESS_KEY_OLD and MINIO_SECRET_KEY_OLD envs")
 	}
 
-	return saveConfig(GlobalContext, objAPI, backendEncryptedFile, backendEncryptedMigrationComplete)
+	return saveConfig(ctx, objAPI, backendEncryptedFile, backendEncryptedMigrationComplete)
 }

@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+
+	"github.com/minio/minio/pkg/dsync"
 )
 
 // Helper function to create a lock server for testing
@@ -73,11 +75,11 @@ func TestLockRpcServerRemoveEntry(t *testing.T) {
 	lri := locker.ll.lockMap["name"]
 
 	// test unknown uid
-	if locker.ll.removeEntry("name", "unknown-uid", &lri) {
+	if locker.ll.removeEntry("name", dsync.LockArgs{UID: "unknown-uid"}, &lri) {
 		t.Errorf("Expected %#v, got %#v", false, true)
 	}
 
-	if !locker.ll.removeEntry("name", "0123-4567", &lri) {
+	if !locker.ll.removeEntry("name", dsync.LockArgs{UID: "0123-4567"}, &lri) {
 		t.Errorf("Expected %#v, got %#v", true, false)
 	} else {
 		gotLri := locker.ll.lockMap["name"]
@@ -87,7 +89,7 @@ func TestLockRpcServerRemoveEntry(t *testing.T) {
 		}
 	}
 
-	if !locker.ll.removeEntry("name", "89ab-cdef", &lri) {
+	if !locker.ll.removeEntry("name", dsync.LockArgs{UID: "89ab-cdef"}, &lri) {
 		t.Errorf("Expected %#v, got %#v", true, false)
 	} else {
 		gotLri := locker.ll.lockMap["name"]

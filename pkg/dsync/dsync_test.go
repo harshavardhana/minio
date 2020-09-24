@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 	}
 
 	ds = &Dsync{
-		GetLockersFn: func() []NetLocker { return clnts },
+		GetLockers: func() ([]NetLocker, string) { return clnts, "uuid" },
 	}
 
 	startRPCServers(nodes)

@@ -437,9 +437,6 @@ func (sys *IAMSys) Init(ctx context.Context, objAPI ObjectLayer) {
 	// Indicate to our routine to exit cleanly upon return.
 	defer cancel()
 
-	// Hold the lock for migration only.
-	txnLk := objAPI.NewNSLock(retryCtx, minioMetaBucket, minioConfigPrefix+"/iam.lock")
-
 	// Initializing IAM sub-system needs a retry mechanism for
 	// the following reasons:
 	//  - Read quorum is lost just after the initialization
@@ -449,37 +446,20 @@ func (sys *IAMSys) Init(ctx context.Context, objAPI ObjectLayer) {
 	rquorum := InsufficientReadQuorum{}
 	wquorum := InsufficientWriteQuorum{}
 
-	// allocate dynamic timeout once before the loop
-	iamLockTimeout := newDynamicTimeout(5*time.Second, 3*time.Second)
-
 	for range retry.NewTimerWithJitter(retryCtx, time.Second, 5*time.Second, retry.MaxJitter) {
-		// let one of the server acquire the lock, if not let them timeout.
-		// which shall be retried again by this loop.
-		if err := txnLk.GetLock(iamLockTimeout); err != nil {
-			logger.Info("Waiting for all MinIO IAM sub-system to be initialized.. trying to acquire lock")
-			continue
-		}
-
 		if globalEtcdClient != nil {
 			// ****  WARNING ****
 			// Migrating to encrypted backend on etcd should happen before initialization of
 			// IAM sub-system, make sure that we do not move the above codeblock elsewhere.
-			if err := migrateIAMConfigsEtcdToEncrypted(ctx, globalEtcdClient); err != nil {
-				txnLk.Unlock()
-				logger.LogIf(ctx, fmt.Errorf("Unable to decrypt an encrypted ETCD backend for IAM users and policies: %w", err))
-				logger.LogIf(ctx, errors.New("IAM sub-system is partially initialized, some users may not be available"))
+			if err := migrateIAMConfigsEtcdToEncrypted(retryCtx, globalEtcdClient); err != nil {
+				logger.LogIf(retryCtx, fmt.Errorf("Unable to decrypt an encrypted ETCD backend for IAM users and policies: %w", err))
+				logger.LogIf(retryCtx, errors.New("IAM sub-system is partially initialized, some users may not be available"))
 				return
 			}
 		}
 
-		// These messages only meant primarily for distributed setup, so only log during distributed setup.
-		if globalIsDistErasure {
-			logger.Info("Waiting for all MinIO IAM sub-system to be initialized.. lock acquired")
-		}
-
 		// Migrate IAM configuration, if necessary.
-		if err := sys.doIAMConfigMigration(ctx); err != nil {
-			txnLk.Unlock()
+		if err := sys.doIAMConfigMigration(retryCtx); err != nil {
 			if errors.Is(err, errDiskNotFound) ||
 				errors.Is(err, errConfigNotFound) ||
 				errors.Is(err, context.Canceled) ||
@@ -490,17 +470,15 @@ func (sys *IAMSys) Init(ctx context.Context, objAPI ObjectLayer) {
 				logger.Info("Waiting for all MinIO IAM sub-system to be initialized.. possible cause (%v)", err)
 				continue
 			}
-			logger.LogIf(ctx, fmt.Errorf("Unable to migrate IAM users and policies to new format: %w", err))
-			logger.LogIf(ctx, errors.New("IAM sub-system is partially initialized, some users may not be available"))
+			logger.LogIf(retryCtx, fmt.Errorf("Unable to migrate IAM users and policies to new format: %w", err))
+			logger.LogIf(retryCtx, errors.New("IAM sub-system is partially initialized, some users may not be available"))
 			return
 		}
 
-		// Successfully migrated, proceed to load the users.
-		txnLk.Unlock()
 		break
 	}
 
-	err := sys.store.loadAll(ctx, sys)
+	err := sys.store.loadAll(retryCtx, sys)
 
 	// Invalidate the old cred always, even upon error to avoid any leakage.
 	globalOldCred = auth.Credentials{}

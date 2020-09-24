@@ -86,6 +86,7 @@ func (client *lockRESTClient) Close() error {
 // restCall makes a call to the lock REST server.
 func (client *lockRESTClient) restCall(ctx context.Context, call string, args dsync.LockArgs) (reply bool, err error) {
 	values := url.Values{}
+	values.Set(lockRESTOwner, args.Owner)
 	values.Set(lockRESTUID, args.UID)
 	values.Set(lockRESTSource, args.Source)
 	var buffer bytes.Buffer

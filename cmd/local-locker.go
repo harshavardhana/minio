@@ -32,6 +32,9 @@ type lockRequesterInfo struct {
 	Timestamp     time.Time // Timestamp set at the time of initialization.
 	TimeLastCheck time.Time // Timestamp for last check of validity of lock.
 	Source        string    // Contains line, function and filename reqesting the lock.
+	// Owner represents the UUID of the owner who originally requested the lock
+	// useful in expiry.
+	Owner string
 }
 
 // isWriteLock returns whether the lock is a write or read lock.
@@ -94,6 +97,7 @@ func (l *localLocker) Lock(ctx context.Context, args dsync.LockArgs) (reply bool
 					Writer:        true,
 					Source:        args.Source,
 					UID:           args.UID,
+					Owner:         args.Owner,
 					Timestamp:     UTCNow(),
 					TimeLastCheck: UTCNow(),
 				},
@@ -113,7 +117,7 @@ func (l *localLocker) Unlock(args dsync.LockArgs) (reply bool, err error) {
 	}
 	for _, resource := range args.Resources {
 		lri := l.lockMap[resource]
-		if !l.removeEntry(resource, args.UID, &lri) {
+		if !l.removeEntry(resource, args, &lri) {
 			return false, fmt.Errorf("Unlock unable to find corresponding lock for uid: %s on resource %s", args.UID, resource)
 		}
 	}
@@ -124,10 +128,10 @@ func (l *localLocker) Unlock(args dsync.LockArgs) (reply bool, err error) {
 // removeEntry based on the uid of the lock message, removes a single entry from the
 // lockRequesterInfo array or the whole array from the map (in case of a write lock
 // or last read lock)
-func (l *localLocker) removeEntry(name, uid string, lri *[]lockRequesterInfo) bool {
+func (l *localLocker) removeEntry(name string, args dsync.LockArgs, lri *[]lockRequesterInfo) bool {
 	// Find correct entry to remove based on uid.
 	for index, entry := range *lri {
-		if entry.UID == uid {
+		if entry.UID == args.UID && entry.Owner == args.Owner {
 			if len(*lri) == 1 {
 				// Remove the write lock.
 				delete(l.lockMap, name)
@@ -155,6 +159,7 @@ func (l *localLocker) RLock(ctx context.Context, args dsync.LockArgs) (reply boo
 			Writer:        false,
 			Source:        args.Source,
 			UID:           args.UID,
+			Owner:         args.Owner,
 			Timestamp:     UTCNow(),
 			TimeLastCheck: UTCNow(),
 		}
@@ -187,7 +192,7 @@ func (l *localLocker) RUnlock(args dsync.LockArgs) (reply bool, err error) {
 		// A write-lock is held, cannot release a read lock
 		return reply, fmt.Errorf("RUnlock attempted on a write locked entity: %s", resource)
 	}
-	if !l.removeEntry(resource, args.UID, &lri) {
+	if !l.removeEntry(resource, args, &lri) {
 		return false, fmt.Errorf("RUnlock unable to find corresponding read lock for uid: %s", args.UID)
 	}
 	return reply, nil
@@ -226,7 +231,7 @@ func (l *localLocker) Expired(ctx context.Context, args dsync.LockArgs) (expired
 			if lri, ok := l.lockMap[resource]; ok {
 				// Check whether uid is still active
 				for _, entry := range lri {
-					if entry.UID == args.UID {
+					if entry.UID == args.UID && entry.Owner == args.Owner {
 						return false, nil
 					}
 				}
@@ -244,7 +249,7 @@ func (l *localLocker) removeEntryIfExists(nlrip nameLockRequesterInfoPair) {
 		// Even if the entry exists, it may not be the same entry which was
 		// considered as expired, so we simply an attempt to remove it if its
 		// not possible there is nothing we need to do.
-		l.removeEntry(nlrip.name, nlrip.lri.UID, &lri)
+		l.removeEntry(nlrip.name, dsync.LockArgs{Owner: nlrip.lri.Owner, UID: nlrip.lri.UID}, &lri)
 	}
 }
 
