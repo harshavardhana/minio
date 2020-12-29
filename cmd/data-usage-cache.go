@@ -466,8 +466,10 @@ type objectIO interface {
 // Only backend errors are returned as errors.
 // If the object is not found or unable to deserialize d is cleared and nil error is returned.
 func (d *dataUsageCache) load(ctx context.Context, store objectIO, name string) error {
-	var buf bytes.Buffer
-	err := store.GetObject(ctx, dataUsageBucket, name, 0, -1, &buf, "", ObjectOptions{})
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+	err := store.GetObject(ctx, dataUsageBucket, name, 0, -1, buf, "", ObjectOptions{})
 	if err != nil {
 		switch err.(type) {
 		case ObjectNotFound:
@@ -479,7 +481,7 @@ func (d *dataUsageCache) load(ctx context.Context, store objectIO, name string) 
 		*d = dataUsageCache{}
 		return nil
 	}
-	err = d.deserialize(&buf)
+	err = d.deserialize(buf)
 	if err != nil {
 		*d = dataUsageCache{}
 		logger.LogIf(ctx, err)

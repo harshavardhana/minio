@@ -88,8 +88,12 @@ func runDataCrawler(ctx context.Context, objAPI ObjectLayer) {
 
 	// Load current bloom cycle
 	nextBloomCycle := intDataUpdateTracker.current() + 1
-	var buf bytes.Buffer
-	err := objAPI.GetObject(ctx, dataUsageBucket, dataUsageBloomName, 0, -1, &buf, "", ObjectOptions{})
+
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+
+	err := objAPI.GetObject(ctx, dataUsageBucket, dataUsageBloomName, 0, -1, buf, "", ObjectOptions{})
 	if err != nil {
 		if !isErrObjectNotFound(err) && !isErrBucketNotFound(err) {
 			logger.LogIf(ctx, err)

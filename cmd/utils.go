@@ -406,6 +406,12 @@ type minioProfiler interface {
 var globalProfiler map[string]minioProfiler
 var globalProfilerMu sync.Mutex
 
+var logBufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 // dump the request into a string in JSON format.
 func dumpRequest(r *http.Request) string {
 	header := r.Header.Clone()
@@ -419,8 +425,11 @@ func dumpRequest(r *http.Request) string {
 		Header     http.Header `json:"header"`
 	}{r.Method, rawURI, header}
 
-	var buffer bytes.Buffer
-	enc := json.NewEncoder(&buffer)
+	buf := logBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer logBufferPool.Put(buf)
+
+	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(&req); err != nil {
 		// Upon error just return Go-syntax representation of the value
@@ -428,7 +437,7 @@ func dumpRequest(r *http.Request) string {
 	}
 
 	// Formatted string.
-	return strings.TrimSpace(buffer.String())
+	return strings.TrimSpace(buf.String())
 }
 
 // isFile - returns whether given path is a file or not.

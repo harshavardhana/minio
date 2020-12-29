@@ -121,8 +121,12 @@ func (b *bloomFilter) bytes() []byte {
 	if b == nil || b.BloomFilter == nil {
 		return nil
 	}
-	var buf bytes.Buffer
-	_, err := b.WriteTo(&buf)
+
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+
+	_, err := b.WriteTo(buf)
 	if err != nil {
 		logger.LogIf(GlobalContext, err)
 		return nil
@@ -582,8 +586,12 @@ func (d *dataUpdateTracker) filterFrom(ctx context.Context, oldest, newest uint6
 		}
 		bfr.NewestIdx = idx
 	}
-	var dst bytes.Buffer
-	_, err := bf.WriteTo(&dst)
+
+	dst := bufferPool.Get().(*bytes.Buffer)
+	dst.Reset()
+	defer bufferPool.Put(dst)
+
+	_, err := bf.WriteTo(dst)
 	if err != nil {
 		logger.LogIf(ctx, err)
 		return nil
