@@ -21,6 +21,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"runtime"
 	"strings"
@@ -78,16 +79,12 @@ func (t *transitionState) queueTransitionTask(oi ObjectInfo) {
 }
 
 var (
-	globalTransitionState      *transitionState
-	globalTransitionConcurrent = runtime.GOMAXPROCS(0) / 2
+	globalTransitionState *transitionState
+	// minimum 25 concurrent process
+	globalTransitionConcurrent = int(math.Min(float64(runtime.GOMAXPROCS(0)/2), 25))
 )
 
 func newTransitionState() *transitionState {
-
-	// fix minimum concurrent transition to 1 for single CPU setup
-	if globalTransitionConcurrent == 0 {
-		globalTransitionConcurrent = 1
-	}
 	ts := &transitionState{
 		transitionCh: make(chan ObjectInfo, 10000),
 	}

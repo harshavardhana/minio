@@ -19,6 +19,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"runtime"
 	"strings"
@@ -596,19 +597,11 @@ func (r *replicationState) queueReplicaDeleteTask(doi DeletedObjectVersionInfo) 
 
 var (
 	globalReplicationState *replicationState
-	// TODO: currently keeping it conservative
-	// but eventually can be tuned in future,
-	// take only half the CPUs for replication
-	// conservatively.
-	globalReplicationConcurrent = runtime.GOMAXPROCS(0) / 2
+	// minimum 25 concurrent process
+	globalReplicationConcurrent = int(math.Min(float64(runtime.GOMAXPROCS(0)/2), 25))
 )
 
 func newReplicationState() *replicationState {
-
-	// fix minimum concurrent replication to 1 for single CPU setup
-	if globalReplicationConcurrent == 0 {
-		globalReplicationConcurrent = 1
-	}
 	rs := &replicationState{
 		replicaCh:       make(chan ObjectInfo, 10000),
 		replicaDeleteCh: make(chan DeletedObjectVersionInfo, 10000),
