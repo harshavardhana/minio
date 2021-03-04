@@ -30,7 +30,7 @@ import (
 type GetReaderFunc func(offset, length int64) (io.ReadCloser, error)
 
 func footerSize(getReaderFunc GetReaderFunc) (size int64, err error) {
-	rc, err := getReaderFunc(-8, 4)
+	rc, err := getReaderFunc(-8, -5)
 	if err != nil {
 		return 0, err
 	}
@@ -52,7 +52,7 @@ func fileMetadata(getReaderFunc GetReaderFunc) (*parquet.FileMetaData, error) {
 		return nil, err
 	}
 
-	rc, err := getReaderFunc(-(8 + size), size)
+	rc, err := getReaderFunc(-(8 + size), -9)
 	if err != nil {
 		return nil, err
 	}

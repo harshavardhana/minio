@@ -183,20 +183,16 @@ func (api objectAPIHandlers) SelectObjectContentHandler(w http.ResponseWriter, r
 		getObjectNInfo = api.CacheAPI().GetObjectNInfo
 	}
 
-	getObject := func(offset, length int64) (rc io.ReadCloser, err error) {
+	getObject := func(start, end int64) (rc io.ReadCloser, err error) {
 		isSuffixLength := false
-		if offset < 0 {
+		if start < 0 {
 			isSuffixLength = true
-		}
-
-		if length > 0 {
-			length--
 		}
 
 		rs := &HTTPRangeSpec{
 			IsSuffixLength: isSuffixLength,
-			Start:          offset,
-			End:            offset + length,
+			Start:          start,
+			End:            end,
 		}
 
 		return getObjectNInfo(ctx, bucket, object, rs, r.Header, readLock, opts)
@@ -3587,16 +3583,16 @@ func (api objectAPIHandlers) PostRestoreObjectHandler(w http.ResponseWriter, r *
 	go func() {
 		rctx := GlobalContext
 		if !rreq.SelectParameters.IsEmpty() {
-			getObject := func(offset, length int64) (rc io.ReadCloser, err error) {
+			getObject := func(start, end int64) (rc io.ReadCloser, err error) {
 				isSuffixLength := false
-				if offset < 0 {
+				if start < 0 {
 					isSuffixLength = true
 				}
 
 				rs := &HTTPRangeSpec{
 					IsSuffixLength: isSuffixLength,
-					Start:          offset,
-					End:            offset + length,
+					Start:          start,
+					End:            end,
 				}
 
 				return getTransitionedObjectReader(rctx, bucket, object, rs, r.Header, objInfo, ObjectOptions{

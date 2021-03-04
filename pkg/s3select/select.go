@@ -202,6 +202,12 @@ type RequestProgress struct {
 	Enabled bool `xml:"Enabled"`
 }
 
+// ScanRange - Specifies the byte range of the object to get the records from.
+type ScanRange struct {
+	Start int64 `xml:"Start"`
+	End   int64 `xml:"End"`
+}
+
 // S3Select - filters the contents on a simple structured query language (SQL) statement. It
 // represents elements inside <SelectRequest/> in request XML specified in detail at
 // https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectSELECTContent.html.
@@ -212,6 +218,7 @@ type S3Select struct {
 	Input          InputSerialization  `xml:"InputSerialization"`
 	Output         OutputSerialization `xml:"OutputSerialization"`
 	Progress       RequestProgress     `xml:"RequestProgress"`
+	ScanRange      *ScanRange          `xml:"ScanRange"`
 
 	statement      *sql.SelectStatement
 	progressReader *progressReader
@@ -289,9 +296,13 @@ func (s3Select *S3Select) getProgress() (bytesScanned, bytesProcessed int64) {
 // Open - opens S3 object by using callback for SQL selection query.
 // Currently CSV, JSON and Apache Parquet formats are supported.
 func (s3Select *S3Select) Open(getReader func(offset, length int64) (io.ReadCloser, error)) error {
+	start, end := int64(0), int64(-1)
+	if s3Select.ScanRange != nil {
+		start, end = s3Select.ScanRange.Start, s3Select.ScanRange.End
+	}
 	switch s3Select.Input.format {
 	case csvFormat:
-		rc, err := getReader(0, -1)
+		rc, err := getReader(start, end)
 		if err != nil {
 			return err
 		}
@@ -313,7 +324,7 @@ func (s3Select *S3Select) Open(getReader func(offset, length int64) (io.ReadClos
 		}
 		return nil
 	case jsonFormat:
-		rc, err := getReader(0, -1)
+		rc, err := getReader(start, end)
 		if err != nil {
 			return err
 		}
@@ -337,6 +348,9 @@ func (s3Select *S3Select) Open(getReader func(offset, length int64) (io.ReadClos
 	case parquetFormat:
 		if !strings.EqualFold(os.Getenv("MINIO_API_SELECT_PARQUET"), "on") {
 			return errors.New("parquet format parsing not enabled on server")
+		}
+		if s3Select.ScanRange.Start > 0 || s3Select.ScanRange.End > 0 {
+			return errors.New("parquet format parsing does not support ScanRange")
 		}
 		var err error
 		s3Select.recordReader, err = parquet.NewReader(getReader, &s3Select.Input.ParquetArgs)
