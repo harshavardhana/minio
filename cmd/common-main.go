@@ -598,6 +598,14 @@ func loadEnvVarsFromFiles() {
 		if err != nil && !os.IsNotExist(err) {
 			logger.Fatal(err, "Unable to read the config environment file")
 		}
+		// unset all MINIO_ environment variables if any.
+		for _, k := range env.List(minioEnvPrefix) {
+			os.Unsetenv(k)
+		}
+		// unset all _MINIO environment variables if any.
+		for _, k := range env.List(minioHiddenEnvPrefix) {
+			os.Unsetenv(k)
+		}
 		for _, ekv := range ekvs {
 			os.Setenv(ekv.Key, ekv.Value)
 		}

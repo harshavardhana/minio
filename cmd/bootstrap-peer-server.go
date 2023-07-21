@@ -101,6 +101,11 @@ func (s1 ServerSystemConfig) Diff(s2 ServerSystemConfig) error {
 	return nil
 }
 
+var (
+	minioEnvPrefix       = "MINIO_"
+	minioHiddenEnvPrefix = "_MINIO"
+)
+
 var skipEnvs = map[string]struct{}{
 	"MINIO_OPTS":          {},
 	"MINIO_CERT_PASSWD":   {},
@@ -113,7 +118,7 @@ var skipEnvs = map[string]struct{}{
 }
 
 func getServerSystemCfg() ServerSystemConfig {
-	envs := env.List("MINIO_")
+	envs := env.List(minioEnvPrefix)
 	envValues := make(map[string]string, len(envs))
 	for _, envK := range envs {
 		// skip certain environment variables as part
