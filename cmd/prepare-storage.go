@@ -216,7 +216,7 @@ func connectLoadInitFormats(verboseLogging bool, firstDisk bool, endpoints Endpo
 
 	// All disks report unformatted we should initialized everyone.
 	if unformattedDisks && firstDisk {
-		logger.Info("Formatting %s pool, %v set(s), %v drives per set.",
+		logger.Info("Initializing %s pool, %v set(s), %v drives per set.",
 			humanize.Ordinal(poolCount), setCount, setDriveCount)
 
 		// Initialize erasure code format on disks

@@ -926,11 +926,6 @@ func serverMain(ctx *cli.Context) {
 
 		// Prints the formatted startup message, if err is not nil then it prints additional information as well.
 		printStartupMessage(getAPIEndpoints(), err)
-
-		// Print a warning at the end of the startup banner so it is more noticeable
-		if newObject.BackendInfo().StandardSCParity == 0 {
-			logger.Error("Warning: The standard parity is set to 0. This can lead to data loss.")
-		}
 	}()
 
 	region := globalSite.Region

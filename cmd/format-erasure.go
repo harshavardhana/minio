@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"github.com/dustin/go-humanize"
-	"github.com/minio/minio/internal/color"
 	"github.com/minio/minio/internal/config"
 	"github.com/minio/minio/internal/config/storageclass"
 	"github.com/minio/minio/internal/grid"
@@ -782,8 +781,6 @@ func initFormatErasure(ctx context.Context, storageDisks []StorageAPI, setCount,
 						logger.Info("   - Drive: %s", disk.String())
 					}
 				})
-				logger.Info(color.Yellow("WARNING:")+" Host %v has more than %v drives of set. "+
-					"A host failure will result in data becoming unavailable.", host, wantAtMost)
 			}
 		}
 	}
