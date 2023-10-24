@@ -713,13 +713,8 @@ func readAllXL(ctx context.Context, disks []StorageAPI, bucket, object string, r
 	return pickLatestQuorumFilesInfo(ctx, rawFileInfos, errs, bucket, object, readData, inclFreeVers, allParts)
 }
 
-func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object string, opts ObjectOptions, readData bool) (fi FileInfo, onlineMeta []FileInfo, onlineDisks []StorageAPI, err error) {
-	var (
-		modTime time.Time
-		etag    string
-
-		mu sync.Mutex
-	)
+func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object string, opts ObjectOptions, readData bool) (FileInfo, []FileInfo, []StorageAPI, error) {
+	var mu sync.Mutex
 
 	rawArr := make([]RawFileInfo, er.setDriveCount)
 	metaArr := make([]FileInfo, er.setDriveCount)
@@ -833,17 +828,26 @@ func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object s
 		if err != nil {
 			return FileInfo{}, nil, nil, time.Time{}, "", err
 		}
-		onlineDisks, modTime, etag = listOnlineDisks(disks, metaArr, errs, readQuorum)
-		fi, err = pickValidFileInfo(ctx, metaArr, modTime, etag, readQuorum)
+		onlineDisks, modTime, etag := listOnlineDisks(disks, metaArr, errs, readQuorum)
+		fi, err := pickValidFileInfo(ctx, metaArr, modTime, etag, readQuorum)
 		if err != nil {
 			return FileInfo{}, nil, nil, time.Time{}, "", err
 		}
 
-		onlineMeta = make([]FileInfo, len(metaArr))
+		onlineMeta := make([]FileInfo, len(metaArr))
 		copy(onlineMeta, metaArr)
 
 		return fi, onlineMeta, onlineDisks, modTime, etag, nil
 	}
+
+	var (
+		modTime     time.Time
+		etag        string
+		fi          FileInfo
+		onlineMeta  []FileInfo
+		onlineDisks []StorageAPI
+		err         error
+	)
 
 	for success := range done {
 		totalResp++
