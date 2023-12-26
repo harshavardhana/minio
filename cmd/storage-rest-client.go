@@ -627,9 +627,9 @@ func (client *storageRESTClient) Delete(ctx context.Context, volume string, path
 }
 
 // DeleteVersions - deletes list of specified versions if present
-func (client *storageRESTClient) DeleteVersions(ctx context.Context, volume string, versions []FileInfoVersions) (errs []error) {
+func (client *storageRESTClient) DeleteVersions(ctx context.Context, volume string, versions []FileInfoVersions) (dataDirs []string, errs []error) {
 	if len(versions) == 0 {
-		return errs
+		return nil, errs
 	}
 
 	values := make(url.Values)
@@ -654,7 +654,7 @@ func (client *storageRESTClient) DeleteVersions(ctx context.Context, volume stri
 		for i := range errs {
 			errs[i] = err
 		}
-		return errs
+		return nil, errs
 	}
 
 	reader, err := waitForHTTPResponse(respBody)
@@ -662,7 +662,7 @@ func (client *storageRESTClient) DeleteVersions(ctx context.Context, volume stri
 		for i := range errs {
 			errs[i] = err
 		}
-		return errs
+		return nil, errs
 	}
 
 	dErrResp := &DeleteVersionsErrsResp{}
@@ -670,14 +670,14 @@ func (client *storageRESTClient) DeleteVersions(ctx context.Context, volume stri
 		for i := range errs {
 			errs[i] = err
 		}
-		return errs
+		return nil, errs
 	}
 
 	for i, dErr := range dErrResp.Errs {
 		errs[i] = toStorageErr(dErr)
 	}
 
-	return errs
+	return dErrResp.DataDirs, errs
 }
 
 // RenameFile - renames a file.

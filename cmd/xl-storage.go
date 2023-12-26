@@ -999,10 +999,10 @@ func (s *xlStorage) ListDir(ctx context.Context, volume, dirPath string, count i
 	return entries, nil
 }
 
-func (s *xlStorage) deleteVersions(ctx context.Context, volume, path string, fis ...FileInfo) error {
+func (s *xlStorage) deleteVersions(ctx context.Context, volume, path string, fis ...FileInfo) ([]string, error) {
 	volumeDir, err := s.getVolDir(volume)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	discard := true
@@ -1011,7 +1011,7 @@ func (s *xlStorage) deleteVersions(ctx context.Context, volume, path string, fis
 	buf, _, err := s.readAllData(ctx, volume, volumeDir, pathJoin(volumeDir, path, xlStorageFormatFile), discard)
 	if err != nil {
 		if !errors.Is(err, errFileNotFound) {
-			return err
+			return nil, err
 		}
 
 		s.RLock()
@@ -1020,61 +1020,38 @@ func (s *xlStorage) deleteVersions(ctx context.Context, volume, path string, fis
 		if legacy {
 			buf, _, err = s.readAllData(ctx, volume, volumeDir, pathJoin(volumeDir, path, xlStorageFormatFileV1), discard)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			legacyJSON = true
 		}
 	}
 
 	if len(buf) == 0 {
-		return errFileNotFound
+		return nil, errFileNotFound
 	}
 
 	if legacyJSON {
 		// Delete the meta file, if there are no more versions the
 		// top level parent is automatically removed.
-		return s.deleteFile(volumeDir, pathJoin(volumeDir, path), true, false)
+		return []string{legacyDataDir}, s.deleteFile(volumeDir, pathJoin(volumeDir, path), true, false)
 	}
 
 	var xlMeta xlMetaV2
 	if err = xlMeta.LoadOrConvert(buf); err != nil {
-		return err
+		return nil, err
 	}
 
-	for _, fi := range fis {
+	dataDirs := make([]string, len(fis))
+	for i, fi := range fis {
 		dataDir, err := xlMeta.DeleteVersion(fi)
 		if err != nil {
 			if !fi.Deleted && (err == errFileNotFound || err == errFileVersionNotFound) {
 				// Ignore these since they do not exist
 				continue
 			}
-			return err
+			return nil, err
 		}
-		if dataDir != "" {
-			versionID := fi.VersionID
-			if versionID == "" {
-				versionID = nullVersionID
-			}
-
-			// PR #11758 used DataDir, preserve it
-			// for users who might have used master
-			// branch
-			xlMeta.data.remove(versionID, dataDir)
-
-			// We need to attempt delete "dataDir" on the disk
-			// due to a CopyObject() bug where it might have
-			// inlined the data incorrectly, to avoid a situation
-			// where we potentially leave "DataDir"
-			filePath := pathJoin(volumeDir, path, dataDir)
-			if err = checkPathLength(filePath); err != nil {
-				return err
-			}
-			if err = s.moveToTrash(filePath, true, false); err != nil {
-				if err != errFileNotFound {
-					return err
-				}
-			}
-		}
+		dataDirs[i] = dataDir
 	}
 
 	lastVersion := len(xlMeta.versions) == 0
@@ -1082,33 +1059,41 @@ func (s *xlStorage) deleteVersions(ctx context.Context, volume, path string, fis
 		buf, err = xlMeta.AppendTo(metaDataPoolGet())
 		defer metaDataPoolPut(buf)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		return s.WriteAll(ctx, volume, pathJoin(path, xlStorageFormatFile), buf)
+		return dataDirs, s.WriteAll(ctx, volume, pathJoin(path, xlStorageFormatFile), buf)
 	}
 
-	return s.deleteFile(volumeDir, pathJoin(volumeDir, path), true, false)
+	return dataDirs, s.deleteFile(volumeDir, pathJoin(volumeDir, path), true, false)
 }
 
 // DeleteVersions deletes slice of versions, it can be same object
 // or multiple objects.
-func (s *xlStorage) DeleteVersions(ctx context.Context, volume string, versions []FileInfoVersions) []error {
+func (s *xlStorage) DeleteVersions(ctx context.Context, volume string, versions []FileInfoVersions) ([]string, []error) {
 	errs := make([]error, len(versions))
 
+	var dataDirs []string
 	for i, fiv := range versions {
 		if contextCanceled(ctx) {
 			errs[i] = ctx.Err()
 			continue
 		}
 		w := xioutil.NewDeadlineWorker(globalDriveConfig.GetMaxTimeout())
-		if err := w.Run(func() error { return s.deleteVersions(ctx, volume, fiv.Name, fiv.Versions...) }); err != nil {
+		if err := w.Run(func() error {
+			ddirs, err := s.deleteVersions(ctx, volume, fiv.Name, fiv.Versions...)
+			if err != nil {
+				return err
+			}
+			dataDirs = append(dataDirs, ddirs...)
+		})
+		if  err != nil {
 			errs[i] = err
 		}
 		diskHealthCheckOK(ctx, errs[i])
 	}
 
-	return errs
+	return dataDirs, errs
 }
 
 func (s *xlStorage) moveToTrash(filePath string, recursive, immediatePurge bool) (err error) {

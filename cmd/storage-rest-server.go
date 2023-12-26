@@ -694,6 +694,7 @@ func (s *storageRESTServer) DeleteFileHandler(p *DeleteFileHandlerParams) (grid.
 // for bulk version deletes
 type DeleteVersionsErrsResp struct {
 	Errs []error
+	DataDirs []string
 }
 
 // DeleteVersionsHandler - delete a set of a versions.
@@ -726,13 +727,14 @@ func (s *storageRESTServer) DeleteVersionsHandler(w http.ResponseWriter, r *http
 	encoder := gob.NewEncoder(w)
 	done := keepHTTPResponseAlive(w)
 
-	errs := s.getStorage().DeleteVersions(r.Context(), volume, versions)
+	dataDirs, errs := s.getStorage().DeleteVersions(r.Context(), volume, versions)
 	done(nil)
 	for idx := range versions {
 		if errs[idx] != nil {
 			dErrsResp.Errs[idx] = StorageErr(errs[idx].Error())
 		}
 	}
+	dErrsResp.DataDirs = dataDirs
 	encoder.Encode(dErrsResp)
 }
 

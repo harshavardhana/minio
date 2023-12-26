@@ -1700,6 +1700,8 @@ func (er erasureObjects) DeleteObjects(ctx context.Context, bucket string, objec
 	// Initialize list of errors.
 	delObjErrs := make([][]error, len(storageDisks))
 
+	diskDataDirs := make([][]string, len(storageDisks))
+
 	var wg sync.WaitGroup
 	// Remove versions in bulk for each disk
 	for index, disk := range storageDisks {
@@ -1713,7 +1715,7 @@ func (er erasureObjects) DeleteObjects(ctx context.Context, bucket string, objec
 				}
 				return
 			}
-			errs := disk.DeleteVersions(ctx, bucket, dedupVersions)
+			dataDirs, errs := disk.DeleteVersions(ctx, bucket, dedupVersions)
 			for i, err := range errs {
 				if err == nil {
 					continue
@@ -1728,6 +1730,7 @@ func (er erasureObjects) DeleteObjects(ctx context.Context, bucket string, objec
 					delObjErrs[index][v.Idx] = err
 				}
 			}
+			diskDataDirs[index] = dataDirs
 		}(index, disk)
 	}
 	wg.Wait()
