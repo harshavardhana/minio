@@ -285,12 +285,12 @@ func (p *xlStorageDiskIDCheck) NSScanner(ctx context.Context, cache dataUsageCac
 		return dataUsageCache{}, err
 	}
 
-	fullThrottle := func() bool {
+	weSleep := func() bool {
 		// No ongoing disk operations
-		return cap(p.health.tokens) == len(p.health.tokens)
+		return cap(p.health.tokens) != len(p.health.tokens)
 	}
 
-	return p.storage.NSScanner(ctx, cache, updates, scanMode, fullThrottle)
+	return p.storage.NSScanner(ctx, cache, updates, scanMode, weSleep)
 }
 
 func (p *xlStorageDiskIDCheck) GetDiskLoc() (poolIdx, setIdx, diskIdx int) {
