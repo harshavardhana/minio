@@ -244,8 +244,10 @@ func (m *muxServer) message(msg message) {
 		if len(msg.Payload) > 0 {
 			logger.LogIf(m.ctx, fmt.Errorf("muxServer: EOF message with payload"))
 		}
-		close(m.inbound)
-		m.inbound = nil
+		if m.inbound != nil {
+			close(m.inbound)
+			m.inbound = nil
+		}
 		return
 	}
 

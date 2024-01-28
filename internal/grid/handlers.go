@@ -692,7 +692,9 @@ func (h *StreamTypeHandler[Payload, Req, Resp]) Call(ctx context.Context, c Stre
 		reqT = make(chan Req)
 		// Request handler
 		go func() {
-			defer close(stream.Requests)
+			if stream.Requests != nil {
+				defer close(stream.Requests)
+			}
 			for req := range reqT {
 				b, err := req.MarshalMsg(GetByteBuffer()[:0])
 				if err != nil {
