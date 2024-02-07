@@ -258,14 +258,6 @@ func (client *storageRESTClient) NSScanner(ctx context.Context, cache dataUsageC
 	return *final, nil
 }
 
-func (client *storageRESTClient) SetFormatData(b []byte) {
-	if client.IsOnline() {
-		client.formatMutex.Lock()
-		client.formatData = b
-		client.formatMutex.Unlock()
-	}
-}
-
 func (client *storageRESTClient) GetDiskID() (string, error) {
 	if !client.IsOnline() {
 		// make sure to check if the disk is offline, since the underlying

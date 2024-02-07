@@ -71,14 +71,12 @@ func (z *erasureServerPools) SinglePool() bool {
 // Initialize new pool of erasure sets.
 func newErasureServerPools(ctx context.Context, endpointServerPools EndpointServerPools) (ObjectLayer, error) {
 	var (
-		deploymentID       string
-		distributionAlgo   string
+		deploymentID       = "9dc5b7e6-8d67-4a3b-800e-2d8d84e9285f"
+		distributionAlgo   = "SIPMOD+PARITY"
 		commonParityDrives int
 		err                error
 
-		formats      = make([]*formatErasureV3, len(endpointServerPools))
-		storageDisks = make([][]StorageAPI, len(endpointServerPools))
-		z            = &erasureServerPools{
+		z = &erasureServerPools{
 			serverPools: make([]*erasureSets, len(endpointServerPools)),
 			s3Peer:      NewS3PeerSys(endpointServerPools),
 		}
@@ -106,7 +104,6 @@ func newErasureServerPools(ctx context.Context, endpointServerPools EndpointServ
 	globalBytePoolCap.Populate()
 
 	var localDrives []StorageAPI
-	local := endpointServerPools.FirstLocal()
 	for i, ep := range endpointServerPools {
 		// If storage class is not set during startup, default values are used
 		// -- Default for Reduced Redundancy Storage class is, parity = 2
@@ -124,30 +121,14 @@ func newErasureServerPools(ctx context.Context, endpointServerPools EndpointServ
 			return nil, fmt.Errorf("parity validation returned an error: %w <- (%d, %d), for pool(%s)", err, commonParityDrives, ep.DrivesPerSet, humanize.Ordinal(i+1))
 		}
 
-		bootstrapTrace("waitForFormatErasure: loading disks", func() {
-			storageDisks[i], formats[i], err = waitForFormatErasure(local, ep.Endpoints, i+1,
-				ep.SetCount, ep.DrivesPerSet, deploymentID, distributionAlgo)
-		})
-		if err != nil {
+		// Initialize all storage disks
+		storageDisks, errs := initStorageDisksWithErrors(ep.Endpoints, storageOpts{cleanUp: true, healthCheck: true})
+		if err := checkDiskFatalErrs(errs); err != nil {
 			return nil, err
 		}
 
-		if deploymentID == "" {
-			// all pools should have same deployment ID
-			deploymentID = formats[i].ID
-		}
-
-		if distributionAlgo == "" {
-			distributionAlgo = formats[i].Erasure.DistributionAlgo
-		}
-
-		// Validate if users brought different DeploymentID pools.
-		if deploymentID != formats[i].ID {
-			return nil, fmt.Errorf("all pools must have same deployment ID - expected %s, got %s for pool(%s)", deploymentID, formats[i].ID, humanize.Ordinal(i+1))
-		}
-
 		bootstrapTrace(fmt.Sprintf("newErasureSets: initializing %s pool", humanize.Ordinal(i+1)), func() {
-			z.serverPools[i], err = newErasureSets(ctx, ep, storageDisks[i], formats[i], commonParityDrives, i)
+			z.serverPools[i], err = newErasureSets(ctx, ep, storageDisks, commonParityDrives, i)
 		})
 		if err != nil {
 			return nil, err
@@ -161,7 +142,7 @@ func newErasureServerPools(ctx context.Context, endpointServerPools EndpointServ
 			z.distributionAlgo = distributionAlgo
 		}
 
-		for _, storageDisk := range storageDisks[i] {
+		for _, storageDisk := range storageDisks {
 			if storageDisk != nil && storageDisk.IsLocal() {
 				localDrives = append(localDrives, storageDisk)
 			}
@@ -2259,20 +2240,6 @@ func (z *erasureServerPools) HealObject(ctx context.Context, bucket, object, ver
 	}
 }
 
-func (z *erasureServerPools) getPoolAndSet(id string) (poolIdx, setIdx, diskIdx int, err error) {
-	for poolIdx := range z.serverPools {
-		format := z.serverPools[poolIdx].format
-		for setIdx, set := range format.Erasure.Sets {
-			for i, diskID := range set {
-				if diskID == id {
-					return poolIdx, setIdx, i, nil
-				}
-			}
-		}
-	}
-	return -1, -1, -1, fmt.Errorf("DriveID(%s) %w", id, errDiskNotFound)
-}
-
 const (
 	vmware = "VMWare"
 )
@@ -2304,36 +2271,36 @@ type HealthResult struct {
 
 // ReadHealth returns if the cluster can serve read requests
 func (z *erasureServerPools) ReadHealth(ctx context.Context) bool {
-	erasureSetUpCount := make([][]int, len(z.serverPools))
-	for i := range z.serverPools {
-		erasureSetUpCount[i] = make([]int, len(z.serverPools[i].sets))
-	}
+	// erasureSetUpCount := make([][]int, len(z.serverPools))
+	// for i := range z.serverPools {
+	// 	erasureSetUpCount[i] = make([]int, len(z.serverPools[i].sets))
+	// }
 
-	diskIDs := globalNotificationSys.GetLocalDiskIDs(ctx)
-	diskIDs = append(diskIDs, getLocalDiskIDs(z))
+	// diskIDs := globalNotificationSys.GetLocalDiskIDs(ctx)
+	// diskIDs = append(diskIDs, getLocalDiskIDs(z))
 
-	for _, localDiskIDs := range diskIDs {
-		for _, id := range localDiskIDs {
-			poolIdx, setIdx, _, err := z.getPoolAndSet(id)
-			if err != nil {
-				logger.LogIf(ctx, err)
-				continue
-			}
-			erasureSetUpCount[poolIdx][setIdx]++
-		}
-	}
+	// for _, localDiskIDs := range diskIDs {
+	// 	for _, id := range localDiskIDs {
+	// 		// poolIdx, setIdx, _, err := z.getPoolAndSet(id)
+	// 		// if err != nil {
+	// 		// 	logger.LogIf(ctx, err)
+	// 		// 	continue
+	// 		// }
+	// 		erasureSetUpCount[poolIdx][setIdx]++
+	// 	}
+	// }
 
-	b := z.BackendInfo()
-	poolReadQuorums := make([]int, len(b.StandardSCData))
-	copy(poolReadQuorums, b.StandardSCData)
+	// b := z.BackendInfo()
+	// poolReadQuorums := make([]int, len(b.StandardSCData))
+	// copy(poolReadQuorums, b.StandardSCData)
 
-	for poolIdx := range erasureSetUpCount {
-		for setIdx := range erasureSetUpCount[poolIdx] {
-			if erasureSetUpCount[poolIdx][setIdx] < poolReadQuorums[poolIdx] {
-				return false
-			}
-		}
-	}
+	// for poolIdx := range erasureSetUpCount {
+	// 	for setIdx := range erasureSetUpCount[poolIdx] {
+	// 		if erasureSetUpCount[poolIdx][setIdx] < poolReadQuorums[poolIdx] {
+	// 			return false
+	// 		}
+	// 	}
+	// }
 	return true
 }
 

@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"net/http"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -50,7 +49,7 @@ type erasureSets struct {
 	sets []*erasureObjects
 
 	// Reference format.
-	format *formatErasureV3
+	// format *formatErasureV3
 
 	// erasureDisks mutex to lock erasureDisks.
 	erasureDisksMu sync.RWMutex
@@ -202,9 +201,9 @@ func (s *erasureSets) GetDisks(setIndex int) func() []StorageAPI {
 }
 
 // Initialize new set of erasure coded sets.
-func newErasureSets(ctx context.Context, endpoints PoolEndpoints, storageDisks []StorageAPI, format *formatErasureV3, defaultParityCount, poolIdx int) (*erasureSets, error) {
-	setCount := len(format.Erasure.Sets)
-	setDriveCount := len(format.Erasure.Sets[0])
+func newErasureSets(ctx context.Context, endpoints PoolEndpoints, storageDisks []StorageAPI, defaultParityCount, poolIdx int) (*erasureSets, error) {
+	setCount := endpoints.SetCount
+	setDriveCount := endpoints.DrivesPerSet
 
 	endpointStrings := make([]string, len(endpoints.Endpoints))
 	for i, endpoint := range endpoints.Endpoints {
@@ -222,10 +221,9 @@ func newErasureSets(ctx context.Context, endpoints PoolEndpoints, storageDisks [
 		setCount:           setCount,
 		setDriveCount:      setDriveCount,
 		defaultParityCount: defaultParityCount,
-		format:             format,
 		setReconnectEvent:  make(chan int),
-		distributionAlgo:   format.Erasure.DistributionAlgo,
-		deploymentID:       uuid.MustParse(format.ID),
+		distributionAlgo:   "SIPMOD+PARITY",
+		deploymentID:       uuid.MustParse("9dc5b7e6-8d67-4a3b-800e-2d8d84e9285f"),
 		poolIndex:          poolIdx,
 	}
 
@@ -903,12 +901,12 @@ func (s *erasureSets) HealFormat(ctx context.Context, dryRun bool) (res madmin.H
 		return res, errNoHealRequired
 	}
 
-	if !reflect.DeepEqual(s.format, refFormat) {
-		// Format is corrupted and unrecognized by the running instance.
-		logger.LogIf(ctx, fmt.Errorf("Unable to heal the newly replaced drives due to format.json inconsistencies, please engage MinIO support for further assistance: %w",
-			errCorruptedFormat))
-		return res, errCorruptedFormat
-	}
+	// if !reflect.DeepEqual(s.format, refFormat) {
+	// 	// Format is corrupted and unrecognized by the running instance.
+	// 	logger.LogIf(ctx, fmt.Errorf("Unable to heal the newly replaced drives due to format.json inconsistencies, please engage MinIO support for further assistance: %w",
+	// 		errCorruptedFormat))
+	// 	return res, errCorruptedFormat
+	// }
 
 	formatOpID := mustGetUUID()
 

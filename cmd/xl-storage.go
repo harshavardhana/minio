@@ -376,12 +376,6 @@ func (s *xlStorage) GetDiskLoc() (poolIdx, setIdx, diskIdx int) {
 	return s.endpoint.PoolIdx, s.endpoint.SetIdx, s.endpoint.DiskIdx
 }
 
-func (s *xlStorage) SetFormatData(b []byte) {
-	s.Lock()
-	defer s.Unlock()
-	s.formatData = b
-}
-
 func (s *xlStorage) Healing() *healingTracker {
 	healingFile := pathJoin(s.drivePath, minioMetaBucket,
 		bucketMetaPrefix, healingTrackerFilename)
