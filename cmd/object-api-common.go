@@ -61,10 +61,7 @@ type storageOpts struct {
 func newStorageAPI(endpoint Endpoint, opts storageOpts) (storage StorageAPI, err error) {
 	if endpoint.IsLocal {
 		storage, err := newXLStorage(endpoint, opts.cleanUp)
-		if err != nil {
-			return nil, err
-		}
-		return newXLStorageDiskIDCheck(storage, opts.healthCheck), nil
+		return newXLStorageDiskIDCheck(storage, opts.healthCheck), err
 	}
 
 	return newStorageRESTClient(endpoint, opts.healthCheck, globalGrid.Load())

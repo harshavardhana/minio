@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	pathutil "path"
 	"path/filepath"
@@ -202,15 +201,6 @@ func isDirEmpty(dirname string) bool {
 		return false
 	}
 	return len(entries) == 0
-}
-
-// Initialize a new storage disk.
-func newLocalXLStorage(path string) (*xlStorage, error) {
-	u := url.URL{Path: path}
-	return newXLStorage(Endpoint{
-		URL:     &u,
-		IsLocal: true,
-	}, true)
 }
 
 // Make Erasure backend meta volumes.

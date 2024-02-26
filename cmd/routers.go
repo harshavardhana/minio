@@ -81,6 +81,8 @@ func configureServerHandler(endpointServerPools EndpointServerPools) (http.Handl
 	// normalizing URL path minio/minio#3256
 	router := mux.NewRouter().SkipClean(true).UseEncodedPath()
 
+	registerStorageLocalDrives(endpointServerPools)
+
 	// Initialize distributed NS lock.
 	if globalIsDistErasure {
 		registerDistErasureRouters(router, endpointServerPools)

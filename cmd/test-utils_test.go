@@ -202,6 +202,15 @@ func prepareFS(ctx context.Context) (ObjectLayer, string, error) {
 	return obj, fsDirs[0], nil
 }
 
+// Initialize a new storage disk.
+func newLocalXLStorage(path string) (*xlStorage, error) {
+	u := url.URL{Path: path}
+	return newXLStorage(Endpoint{
+		URL:     &u,
+		IsLocal: true,
+	}, true)
+}
+
 func prepareErasureSets32(ctx context.Context) (ObjectLayer, []string, error) {
 	return prepareErasure(ctx, 32)
 }
