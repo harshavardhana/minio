@@ -222,9 +222,9 @@ func (er *erasureObjects) healErasureSet(ctx context.Context, buckets []string, 
 				bucket, humanize.Ordinal(er.setIndex+1))
 		}
 
-		disks, _ := er.getOnlineDisksWithHealing(true)
+		disks, _ := er.getOnlineDisksWithHealing(false)
 		if len(disks) == 0 {
-			logger.LogIf(ctx, fmt.Errorf("no online disks found to heal the bucket `%s`", bucket))
+			logger.LogIf(ctx, fmt.Errorf("all disks are healing `%s`", bucket))
 			continue
 		}
 
