@@ -33,6 +33,9 @@ func checkCopyObjArgs(ctx context.Context, bucket, object string) error {
 
 // Checks on GetObject arguments, bucket and object.
 func checkGetObjArgs(ctx context.Context, bucket, object string) error {
+	if object == SlashSeparator {
+		return ObjectNotFound{Bucket: bucket, Object: object}
+	}
 	return checkBucketAndObjectNames(ctx, bucket, object)
 }
 
