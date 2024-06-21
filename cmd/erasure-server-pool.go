@@ -2189,7 +2189,7 @@ func (z *erasureServerPools) Walk(ctx context.Context, bucket, prefix string, re
 				}
 
 				if err := listPathRaw(ctx, lopts); err != nil {
-					cancelCause(fmt.Errorf("listPathRaw returned %w: opts(%#v)", err, lopts))
+					cancelCause(fmt.Errorf("Walk: listPathRaw returned %w: opts(%#v)", err, lopts))
 					return
 				}
 			}()

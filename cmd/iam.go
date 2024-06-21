@@ -856,25 +856,32 @@ func (sys *IAMSys) IsServiceAccount(name string) (bool, string, error) {
 }
 
 // GetUserInfo - get info on a user.
-func (sys *IAMSys) GetUserInfo(ctx context.Context, name string) (u madmin.UserInfo, err error) {
+func (sys *IAMSys) GetUserInfo(ctx context.Context, accessKey string) (u madmin.UserInfo, err error) {
 	if !sys.Initialized() {
 		return u, errServerNotInitialized
 	}
 
-	loadUserCalled := false
-	select {
-	case <-sys.configLoaded:
-	default:
-		sys.store.LoadUser(ctx, name)
+	var (
+		loadErr        error
+		loadUserCalled bool
+	)
+
+	u, err = sys.store.GetUserInfo(accessKey)
+	if !ok {
+		loadErr = sys.store.LoadUser(ctx, accessKey)
 		loadUserCalled = true
+
+		u, err = sys.store.GetUserInfo(accessKey)
 	}
 
-	userInfo, err := sys.store.GetUserInfo(name)
-	if err == errNoSuchUser && !loadUserCalled {
-		sys.store.LoadUser(ctx, name)
-		userInfo, err = sys.store.GetUserInfo(name)
+	if !ok && loadUserCalled && loadErr != nil {
+		iamLogOnceIf(ctx, loadErr, accessKey)
+
+		// return 503 to application
+		return u, errIAMNotInitialized
 	}
-	return userInfo, err
+
+	return u, err
 }
 
 // QueryPolicyEntities - queries policy associations for builtin users/groups/policies.
@@ -1713,16 +1720,9 @@ func (sys *IAMSys) CheckKey(ctx context.Context, accessKey string) (u UserIdenti
 		return newUserIdentity(globalActiveCred), true, nil
 	}
 
-	loadUserCalled := false
-	select {
-	case <-sys.configLoaded:
-	default:
-		err = sys.store.LoadUser(ctx, accessKey)
-		loadUserCalled = true
-	}
-
+	var loadUserCalled bool
 	u, ok = sys.store.GetUser(accessKey)
-	if !ok && !loadUserCalled {
+	if !ok {
 		err = sys.store.LoadUser(ctx, accessKey)
 		loadUserCalled = true
 
