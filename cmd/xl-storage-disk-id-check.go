@@ -977,6 +977,12 @@ func (p *xlStorageDiskIDCheck) monitorDiskWritable(ctx context.Context) {
 			return true
 		}
 
+		// if no calls are waiting no need to perform writes to the drive additionally
+		// to check for health.
+		if p.health.waiting.Load() == 0 {
+			return true
+		}
+
 		goOffline := func(err error, spent time.Duration) {
 			if p.health.status.CompareAndSwap(diskHealthOK, diskHealthFaulty) {
 				storageLogAlwaysIf(ctx, fmt.Errorf("node(%s): taking drive %s offline: %v", globalLocalNodeName, p.storage.String(), err))
