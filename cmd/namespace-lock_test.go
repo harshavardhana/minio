@@ -18,7 +18,6 @@
 package cmd
 
 import (
-	"context"
 	"runtime"
 	"testing"
 	"time"
@@ -44,7 +43,7 @@ func TestGetSource(t *testing.T) {
 func TestNSLockRace(t *testing.T) {
 	t.Skip("long test skip it")
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for i := 0; i < 10000; i++ {
 		nsLk := newNSLock(false)
